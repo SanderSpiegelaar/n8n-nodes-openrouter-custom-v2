@@ -268,6 +268,180 @@ export class OpenrouterLlm implements INodeType {
 				default: 1024,
 				description: 'Maximum number of tokens to generate',
 			},
+			{
+				displayName: 'Generation',
+				name: 'generation',
+				type: 'collection',
+				placeholder: 'Add Generation Option',
+				default: {},
+				options: [
+					{
+						displayName: 'Frequency Penalty',
+						name: 'frequencyPenalty',
+						type: 'number',
+						default: '',
+						description: 'Penalty for repeated token frequency',
+					},
+					{
+						displayName: 'Presence Penalty',
+						name: 'presencePenalty',
+						type: 'number',
+						default: '',
+						description: 'Penalty for already-present tokens',
+					},
+					{
+						displayName: 'Prompt Cache Key',
+						name: 'promptCacheKey',
+						type: 'string',
+						default: '',
+						description: 'Stable cache key for OpenRouter prompt caching',
+					},
+					{
+						displayName: 'Seed',
+						name: 'seed',
+						type: 'number',
+						default: '',
+						description: 'Integer seed for deterministic sampling where supported',
+					},
+					{
+						displayName: 'Stop',
+						name: 'stop',
+						type: 'string',
+						default: '',
+						description: 'Stop sequence to send to OpenRouter',
+					},
+					{
+						displayName: 'Top P',
+						name: 'topP',
+						type: 'number',
+						default: '',
+						typeOptions: {
+							minValue: 0,
+							maxValue: 1,
+							numberPrecision: 2,
+						},
+						description: 'Nucleus sampling value',
+					},
+				],
+			},
+			{
+				displayName: 'Reasoning',
+				name: 'reasoning',
+				type: 'collection',
+				placeholder: 'Add Reasoning Option',
+				default: {},
+				options: [
+					{
+						displayName: 'Exclude Reasoning',
+						name: 'exclude',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to exclude reasoning tokens from the response',
+					},
+					{
+						displayName: 'Effort',
+						name: 'effort',
+						type: 'options',
+						options: [
+							{ name: 'High', value: 'high' },
+							{ name: 'Low', value: 'low' },
+							{ name: 'Medium', value: 'medium' },
+							{ name: 'Minimal', value: 'minimal' },
+							{ name: 'Xhigh', value: 'xhigh' },
+						],
+						default: 'medium',
+						description: 'Reasoning effort to send when reasoning mode is Effort',
+					},
+					{
+						displayName: 'Max Tokens',
+						name: 'maxTokens',
+						type: 'number',
+						default: '',
+						description: 'Reasoning token budget to send when reasoning mode is Token Budget',
+					},
+					{
+						displayName: 'Mode',
+						name: 'mode',
+						type: 'options',
+						options: [
+							{ name: 'Default Enabled', value: 'defaultEnabled' },
+							{ name: 'Effort', value: 'effort' },
+							{ name: 'Off', value: 'off' },
+							{ name: 'Token Budget', value: 'tokenBudget' },
+						],
+						default: 'off',
+						description: 'How to control OpenRouter reasoning',
+					},
+				],
+			},
+			{
+				displayName: 'Advanced Sampling',
+				name: 'advancedSampling',
+				type: 'collection',
+				placeholder: 'Add Sampling Option',
+				default: {},
+				options: [
+					{
+						displayName: 'Min P',
+						name: 'minP',
+						type: 'number',
+						default: '',
+						description: 'Minimum probability threshold',
+					},
+					{
+						displayName: 'Repetition Penalty',
+						name: 'repetitionPenalty',
+						type: 'number',
+						default: '',
+						description: 'Penalty for repeated text',
+					},
+					{
+						displayName: 'Top A',
+						name: 'topA',
+						type: 'number',
+						default: '',
+						description: 'Top-a sampling value',
+					},
+					{
+						displayName: 'Top K',
+						name: 'topK',
+						type: 'number',
+						default: '',
+						description: 'Top-k sampling value',
+					},
+					{
+						displayName: 'Transforms',
+						name: 'transforms',
+						type: 'multiOptions',
+						options: [{ name: 'Middle Out', value: 'middle-out' }],
+						default: [],
+						description: 'OpenRouter message transforms to apply',
+					},
+				],
+			},
+			{
+				displayName: 'Response Healing',
+				name: 'responseHealing',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to enable the OpenRouter response-healing plugin',
+			},
+			{
+				displayName: 'Session',
+				name: 'session',
+				type: 'collection',
+				placeholder: 'Add Session Option',
+				default: {},
+				options: [
+					{
+						displayName: 'Session ID',
+						name: 'sessionId',
+						type: 'string',
+						default: '',
+						description: 'OpenRouter session identifier',
+					},
+				],
+			},
 		],
 	};
 
@@ -322,10 +496,7 @@ export class OpenrouterLlm implements INodeType {
 			try {
 				const credentials = await this.getCredentials('openRouterApi');
 				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
-				const temperature = this.getNodeParameter('temperature', itemIndex) as number;
-				const maxTokens = this.getNodeParameter('maxTokens', itemIndex) as number;
-				const messages = buildMessages(this, itemIndex);
-				const modelPayload = buildModelPayload(this, itemIndex);
+				const body = buildRequestBody(this, itemIndex);
 
 				const response = (await this.helpers.httpRequestWithAuthentication.call(
 					this,
@@ -335,12 +506,7 @@ export class OpenrouterLlm implements INodeType {
 						baseURL: baseUrl,
 						url: '/chat/completions',
 						json: true,
-						body: {
-							...modelPayload,
-							messages,
-							temperature,
-							max_tokens: maxTokens,
-						},
+						body,
 					},
 				)) as ChatCompletionResponse;
 
@@ -392,6 +558,85 @@ type ModelLocatorValue =
 			value?: string;
 	  };
 
+function buildRequestBody(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
+	const body: IDataObject = {
+		...buildModelPayload(executeFunctions, itemIndex),
+		messages: buildMessages(executeFunctions, itemIndex),
+	};
+	const temperature = executeFunctions.getNodeParameter('temperature', itemIndex) as number | string;
+	const maxTokens = executeFunctions.getNodeParameter('maxTokens', itemIndex) as number | string;
+	const generation = executeFunctions.getNodeParameter('generation', itemIndex, {}) as IDataObject;
+	const advancedSampling = executeFunctions.getNodeParameter(
+		'advancedSampling',
+		itemIndex,
+		{},
+	) as IDataObject;
+	const reasoning = buildReasoning(
+		executeFunctions,
+		executeFunctions.getNodeParameter('reasoning', itemIndex, {}) as IDataObject,
+	);
+	const responseHealing = executeFunctions.getNodeParameter(
+		'responseHealing',
+		itemIndex,
+		false,
+	) as boolean;
+	const session = executeFunctions.getNodeParameter('session', itemIndex, {}) as IDataObject;
+
+	if (!isUnset(temperature)) {
+		body.temperature = temperature as number;
+	}
+
+	if (!isUnset(maxTokens)) {
+		body.max_tokens = validatePositiveNumber(executeFunctions, maxTokens, 'Max Tokens');
+	}
+
+	addOptionalNumber(body, 'top_p', generation.topP);
+	addOptionalNumber(body, 'frequency_penalty', generation.frequencyPenalty);
+	addOptionalNumber(body, 'presence_penalty', generation.presencePenalty);
+	addOptionalText(executeFunctions, body, 'prompt_cache_key', generation.promptCacheKey, 'Prompt Cache Key');
+	addOptionalNumber(body, 'seed', generation.seed);
+
+	if (!isUnset(generation.stop)) {
+		body.stop = generation.stop as IDataObject['key'];
+	}
+
+	if (reasoning !== undefined) {
+		body.reasoning = reasoning;
+	}
+
+	if (!isUnset(advancedSampling.topK)) {
+		body.top_k = validatePositiveNumber(executeFunctions, advancedSampling.topK, 'Top K');
+	}
+
+	if (!isUnset(advancedSampling.repetitionPenalty)) {
+		body.repetition_penalty = validatePositiveNumber(
+			executeFunctions,
+			advancedSampling.repetitionPenalty,
+			'Repetition Penalty',
+		);
+	}
+
+	if (!isUnset(advancedSampling.minP)) {
+		body.min_p = validateRange(executeFunctions, advancedSampling.minP, 'Min P');
+	}
+
+	if (!isUnset(advancedSampling.topA)) {
+		body.top_a = validateRange(executeFunctions, advancedSampling.topA, 'Top A');
+	}
+
+	if (Array.isArray(advancedSampling.transforms) && advancedSampling.transforms.length > 0) {
+		body.transforms = advancedSampling.transforms;
+	}
+
+	if (responseHealing) {
+		body.plugins = [{ id: 'response-healing' }];
+	}
+
+	addOptionalText(executeFunctions, body, 'session_id', session.sessionId, 'Session ID');
+
+	return body;
+}
+
 function buildModelPayload(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
 	const model = resolvePrimaryModel(executeFunctions, itemIndex);
 	const fallbackModels = resolveFallbackModels(executeFunctions, itemIndex);
@@ -403,6 +648,85 @@ function buildModelPayload(executeFunctions: IExecuteFunctions, itemIndex: numbe
 	}
 
 	return { model };
+}
+
+function buildReasoning(
+	executeFunctions: IExecuteFunctions,
+	reasoning: IDataObject,
+): IDataObject | undefined {
+	const mode = (reasoning.mode as string | undefined) ?? 'off';
+
+	if (mode === 'off') {
+		return undefined;
+	}
+
+	const output: IDataObject = {};
+
+	if (mode === 'effort') {
+		output.effort = (reasoning.effort as string | undefined) ?? 'medium';
+	}
+
+	if (mode === 'tokenBudget') {
+		output.max_tokens = validatePositiveNumber(
+			executeFunctions,
+			reasoning.maxTokens,
+			'Reasoning Max Tokens',
+		);
+	}
+
+	if (reasoning.exclude === true) {
+		output.exclude = true;
+	}
+
+	return output;
+}
+
+function addOptionalNumber(body: IDataObject, wireName: string, value: unknown): void {
+	if (!isUnset(value)) {
+		body[wireName] = value as number;
+	}
+}
+
+function addOptionalText(
+	executeFunctions: IExecuteFunctions,
+	body: IDataObject,
+	wireName: string,
+	value: unknown,
+	label: string,
+): void {
+	if (isUnset(value)) {
+		return;
+	}
+
+	body[wireName] = validateNonEmptyText(executeFunctions, value, label);
+}
+
+function validatePositiveNumber(
+	executeFunctions: IExecuteFunctions,
+	value: unknown,
+	label: string,
+): number {
+	const numericValue = Number(value);
+
+	if (!Number.isFinite(numericValue) || numericValue <= 0) {
+		throw new NodeOperationError(executeFunctions.getNode(), `${label} must be greater than 0.`);
+	}
+
+	return numericValue;
+}
+
+function validateRange(executeFunctions: IExecuteFunctions, value: unknown, label: string): number {
+	const numericValue = Number(value);
+
+	if (!Number.isFinite(numericValue) || numericValue < 0 || numericValue > 1) {
+		throw new NodeOperationError(executeFunctions.getNode(), `${label} must be between 0 and 1.`);
+	}
+
+	return numericValue;
+}
+
+function isUnset(value: unknown): boolean {
+	return value === undefined || value === null || value === '';
 }
 
 function resolvePrimaryModel(executeFunctions: IExecuteFunctions, itemIndex: number): string {
