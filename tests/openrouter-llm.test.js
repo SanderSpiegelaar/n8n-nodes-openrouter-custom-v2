@@ -6,6 +6,10 @@ const packageJson = require('../package.json');
 function createExecutionContext(parameters, overrides = {}) {
 	const requests = [];
 	const inputItems = overrides.inputItems ?? [{ json: { prompt: 'Summarize the status' } }];
+	const responder = overrides.responder ?? (() => ({
+		id: 'gen-1',
+		choices: [{ message: { role: 'assistant', content: 'Done' } }],
+	}));
 
 	return {
 		requests,
@@ -28,11 +32,9 @@ function createExecutionContext(parameters, overrides = {}) {
 			continueOnFail: () => overrides.continueOnFail ?? false,
 			helpers: {
 				httpRequestWithAuthentication: async (_credentialType, requestOptions) => {
-					requests.push(requestOptions);
-					return {
-						id: 'gen-1',
-						choices: [{ message: { role: 'assistant', content: 'Done' } }],
-					};
+					const snapshot = JSON.parse(JSON.stringify(requestOptions));
+					requests.push(snapshot);
+					return responder(requestOptions, requests.length - 1);
 				},
 			},
 		},
@@ -94,6 +96,7 @@ test('Openrouter LLM posts one chat completion request per input item', async ()
 			node_name: 'Openrouter LLM',
 			item_index: 0,
 			model: 'openai/gpt-4o-mini',
+			validation_attempt: 1,
 		},
 		temperature: 0.2,
 		max_tokens: 100,
@@ -518,6 +521,7 @@ test('Openrouter LLM sends Langfuse trace headers and body metadata without cros
 		node_name: 'Openrouter LLM',
 		item_index: 0,
 		model: 'openai/gpt-4o-mini',
+		validation_attempt: 1,
 		tenant: 'acme',
 		payload: { ok: true },
 	});
@@ -761,6 +765,401 @@ test('Openrouter LLM rejects providers appearing in both allow and deny lists ca
 
 	assert.equal(requests.length, 0);
 	assert.match(result[0][0].json.error, /anthropic/i);
+});
+
+test('Openrouter LLM in json_object mode sends response_format and returns parsed structured payload', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_object',
+		},
+		{
+			responder: () => ({
+				id: 'gen-1',
+				choices: [{ message: { role: 'assistant', content: '{"answer":42}' } }],
+			}),
+		},
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.deepEqual(requests[0].body.response_format, { type: 'json_object' });
+	assert.equal(requests.length, 1);
+	assert.deepEqual(result[0][0].json.structured, { answer: 42 });
+	assert.equal(requests[0].body.metadata.validation_attempt, 1);
+});
+
+test('Openrouter LLM in json_object mode rejects array and primitive responses after exhausting retries', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_object',
+			maxValidationAttempts: 1,
+		},
+		{
+			continueOnFail: true,
+			responder: () => ({
+				id: 'gen-1',
+				choices: [{ message: { role: 'assistant', content: '[1,2,3]' } }],
+			}),
+		},
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.equal(requests.length, 1);
+	assert.match(result[0][0].json.error, /non-null JSON object/i);
+});
+
+test('Openrouter LLM in json_schema mode rejects unparseable and uncompilable schemas before any HTTP request', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const cases = [
+		['{not json', /JSON Schema parse failed/i],
+		[JSON.stringify({ type: 'not-a-real-type' }), /JSON Schema compile failed/i],
+	];
+
+	for (const [schema, message] of cases) {
+		const execution = createExecutionContext(
+			{
+				model: 'openai/gpt-4o-mini',
+				prompt: 'Hello',
+				temperature: 0.2,
+				maxTokens: 100,
+				outputMode: 'json_schema',
+				jsonSchema: schema,
+			},
+			{ continueOnFail: true },
+		);
+
+		const result = await node.execute.call(execution.context);
+
+		assert.equal(execution.requests.length, 0);
+		assert.match(result[0][0].json.error, message);
+	}
+});
+
+test('Openrouter LLM in json_schema mode sends strict json_schema response_format and returns parsed structured payload', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const schema = {
+		type: 'object',
+		required: ['email'],
+		properties: { email: { type: 'string', format: 'email' } },
+	};
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_schema',
+			jsonSchema: JSON.stringify(schema),
+		},
+		{
+			responder: () => ({
+				id: 'gen-1',
+				choices: [
+					{
+						message: {
+							role: 'assistant',
+							content: '{"email":"a@b.co"}',
+						},
+					},
+				],
+			}),
+		},
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.deepEqual(requests[0].body.response_format, {
+		type: 'json_schema',
+		json_schema: { schema, strict: true },
+	});
+	assert.deepEqual(result[0][0].json.structured, { email: 'a@b.co' });
+});
+
+test('Openrouter LLM retries once with a corrective system message and succeeds on the second attempt', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const responses = ['not json at all', '{"answer":7}'];
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_object',
+			maxValidationAttempts: 3,
+		},
+		{
+			responder: (_opts, attemptIndex) => ({
+				id: `gen-${attemptIndex + 1}`,
+				choices: [{ message: { role: 'assistant', content: responses[attemptIndex] } }],
+			}),
+		},
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.equal(requests.length, 2);
+	assert.equal(requests[0].body.metadata.validation_attempt, 1);
+	assert.equal(requests[1].body.metadata.validation_attempt, 2);
+	assert.equal(requests[0].body.messages.length, 1);
+	assert.equal(requests[1].body.messages.length, 2);
+	assert.equal(requests[1].body.messages[1].role, 'system');
+	assert.match(requests[1].body.messages[1].content, /failed validation/i);
+	assert.match(requests[1].body.messages[1].content, /Return only valid JSON/i);
+	assert.deepEqual(result[0][0].json.structured, { answer: 7 });
+});
+
+test('Openrouter LLM surfaces a final error after exhausting all validation attempts with last-attempt errors and truncated raw text', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const longRaw = `${'x'.repeat(2100)}`;
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_object',
+			maxValidationAttempts: 3,
+		},
+		{
+			continueOnFail: true,
+			responder: () => ({
+				id: 'gen-1',
+				choices: [{ message: { role: 'assistant', content: longRaw } }],
+			}),
+		},
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.equal(requests.length, 3);
+	assert.equal(requests[2].body.metadata.validation_attempt, 3);
+	assert.match(result[0][0].json.error, /after 3 attempts/i);
+	assert.match(result[0][0].json.error, /\.\.\.\[truncated\]/);
+});
+
+test('Openrouter LLM does not retry on HTTP errors during structured mode', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_object',
+			maxValidationAttempts: 3,
+		},
+		{
+			continueOnFail: true,
+			responder: () => {
+				throw new Error('Upstream 503');
+			},
+		},
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.equal(requests.length, 1);
+	assert.match(result[0][0].json.error, /Upstream 503/);
+});
+
+test('Openrouter LLM resets validation_attempt to 1 across input items even after retries', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const responses = ['nope', '{"a":1}', '{"a":2}'];
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_object',
+			maxValidationAttempts: 3,
+		},
+		{
+			inputItems: [{ json: { id: 1 } }, { json: { id: 2 } }],
+			responder: (_opts, attemptIndex) => ({
+				id: `gen-${attemptIndex + 1}`,
+				choices: [{ message: { role: 'assistant', content: responses[attemptIndex] } }],
+			}),
+		},
+	);
+
+	await node.execute.call(context);
+
+	assert.equal(requests.length, 3);
+	assert.equal(requests[0].body.metadata.validation_attempt, 1);
+	assert.equal(requests[1].body.metadata.validation_attempt, 2);
+	assert.equal(requests[2].body.metadata.validation_attempt, 1);
+	assert.equal(requests[2].body.metadata.item_index, 1);
+});
+
+test('Openrouter LLM keeps custom headers byte-identical across all retry attempts of one item', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const responses = ['nope', 'still bad', '{"ok":true}'];
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_object',
+			maxValidationAttempts: 3,
+			headers: { values: [{ name: 'X-Trace', value: 'abc' }] },
+		},
+		{
+			responder: (_opts, attemptIndex) => ({
+				id: `gen-${attemptIndex + 1}`,
+				choices: [{ message: { role: 'assistant', content: responses[attemptIndex] } }],
+			}),
+		},
+	);
+
+	await node.execute.call(context);
+
+	assert.equal(requests.length, 3);
+	assert.deepEqual(requests[0].headers, requests[1].headers);
+	assert.deepEqual(requests[1].headers, requests[2].headers);
+});
+
+test('Openrouter LLM caps the corrective system message to the first five validation errors', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const schema = {
+		type: 'object',
+		required: ['a', 'b', 'c', 'd', 'e', 'f', 'g'],
+		properties: {
+			a: { type: 'string' },
+			b: { type: 'string' },
+			c: { type: 'string' },
+			d: { type: 'string' },
+			e: { type: 'string' },
+			f: { type: 'string' },
+			g: { type: 'string' },
+		},
+	};
+	const responses = ['{}', '{"a":"x","b":"x","c":"x","d":"x","e":"x","f":"x","g":"x"}'];
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_schema',
+			jsonSchema: JSON.stringify(schema),
+			maxValidationAttempts: 3,
+		},
+		{
+			responder: (_opts, attemptIndex) => ({
+				id: `gen-${attemptIndex + 1}`,
+				choices: [{ message: { role: 'assistant', content: responses[attemptIndex] } }],
+			}),
+		},
+	);
+
+	await node.execute.call(context);
+
+	const corrective = requests[1].body.messages[1].content;
+	const errorLines = corrective.split('\n').filter((line) => line.startsWith('- '));
+	assert.equal(errorLines.length, 5);
+});
+
+test('Openrouter LLM defaults provider.require_parameters to true in structured modes when override is Default', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_object',
+		},
+		{
+			responder: () => ({
+				id: 'gen-1',
+				choices: [{ message: { role: 'assistant', content: '{"ok":true}' } }],
+			}),
+		},
+	);
+
+	await node.execute.call(context);
+
+	assert.deepEqual(requests[0].body.provider, { require_parameters: true });
+});
+
+test('Openrouter LLM honors explicit Require Parameters override over the structured-mode default', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			outputMode: 'json_object',
+			providerRequireParameters: 'false',
+		},
+		{
+			responder: () => ({
+				id: 'gen-1',
+				choices: [{ message: { role: 'assistant', content: '{"ok":true}' } }],
+			}),
+		},
+	);
+
+	await node.execute.call(context);
+
+	assert.deepEqual(requests[0].body.provider, { require_parameters: false });
+});
+
+test('Openrouter LLM in text mode does not auto-set provider.require_parameters', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: 'openai/gpt-4o-mini',
+		prompt: 'Hello',
+		temperature: 0.2,
+		maxTokens: 100,
+	});
+
+	await node.execute.call(context);
+
+	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'provider'), false);
+});
+
+test('Openrouter LLM in text output mode omits response_format and returns structured null', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: 'openai/gpt-4o-mini',
+		prompt: 'Hello',
+		temperature: 0.2,
+		maxTokens: 100,
+	});
+
+	const result = await node.execute.call(context);
+
+	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'response_format'), false);
+	assert.equal(result[0][0].json.structured, null);
 });
 
 test('Openrouter LLM allows exacto variant combined with allow and deny provider lists', async () => {

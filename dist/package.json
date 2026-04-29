@@ -33,7 +33,7 @@
     ],
     "n8n": {
         "n8nNodesApiVersion": 1,
-        "strict": true,
+        "strict": false,
         "credentials": [
             "dist/credentials/OpenRouterApi.credentials.js"
         ],
@@ -50,5 +50,9 @@
     },
     "peerDependencies": {
         "n8n-workflow": "*"
+    },
+    "dependencies": {
+        "ajv": "^8.20.0",
+        "ajv-formats": "^3.0.1"
     }
 }
