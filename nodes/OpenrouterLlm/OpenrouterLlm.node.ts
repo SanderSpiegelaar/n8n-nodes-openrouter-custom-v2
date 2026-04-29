@@ -31,6 +31,7 @@ const SUPPORTED_MODEL_VARIANTS = [
 	':nitro',
 	':online',
 ] as const;
+const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'] as const;
 
 export class OpenrouterLlm implements INodeType {
 	description: INodeTypeDescription = {
@@ -427,6 +428,90 @@ export class OpenrouterLlm implements INodeType {
 				description: 'Whether to enable the OpenRouter response-healing plugin',
 			},
 			{
+				displayName: 'Langfuse Trace',
+				name: 'langfuseTrace',
+				type: 'boolean',
+				default: true,
+				description: 'Whether to add the Langfuse trace header using the n8n execution identifier',
+			},
+			{
+				displayName: 'Headers',
+				name: 'headers',
+				type: 'fixedCollection',
+				placeholder: 'Add Header',
+				default: {},
+				typeOptions: {
+					multipleValues: true,
+				},
+				options: [
+					{
+						displayName: 'Values',
+						name: 'values',
+						values: [
+							{
+								displayName: 'Name',
+								name: 'name',
+								type: 'string',
+								default: '',
+								description: 'Header name',
+							},
+							{
+								displayName: 'Value',
+								name: 'value',
+								type: 'string',
+								default: '',
+								description: 'Header value',
+							},
+						],
+					},
+				],
+				description: 'Custom request headers. Authorization and OpenRouter identity headers are protected.',
+			},
+			{
+				displayName: 'Metadata',
+				name: 'metadata',
+				type: 'fixedCollection',
+				placeholder: 'Add Metadata',
+				default: {},
+				typeOptions: {
+					multipleValues: true,
+				},
+				options: [
+					{
+						displayName: 'Values',
+						name: 'values',
+						values: [
+							{
+								displayName: 'Key',
+								name: 'key',
+								type: 'string',
+								default: '',
+								description: 'Metadata key',
+							},
+							{
+								displayName: 'Value Mode',
+								name: 'valueMode',
+								type: 'options',
+								options: [
+									{ name: 'JSON', value: 'json' },
+									{ name: 'String', value: 'string' },
+								],
+								default: 'string',
+								description: 'How to parse the metadata value',
+							},
+							{
+								displayName: 'Value',
+								name: 'value',
+								type: 'string',
+								default: '',
+								description: 'Metadata value',
+							},
+						],
+					},
+				],
+				description: 'Extra request metadata sent in the body only',
+			},
+			{
 				displayName: 'Session',
 				name: 'session',
 				type: 'collection',
@@ -497,6 +582,7 @@ export class OpenrouterLlm implements INodeType {
 				const credentials = await this.getCredentials('openRouterApi');
 				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
 				const body = buildRequestBody(this, itemIndex);
+				const headers = buildHeaders(this, itemIndex);
 
 				const response = (await this.helpers.httpRequestWithAuthentication.call(
 					this,
@@ -505,6 +591,7 @@ export class OpenrouterLlm implements INodeType {
 						method: 'POST',
 						baseURL: baseUrl,
 						url: '/chat/completions',
+						headers,
 						json: true,
 						body,
 					},
@@ -559,8 +646,10 @@ type ModelLocatorValue =
 	  };
 
 function buildRequestBody(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
+	const modelPayload = buildModelPayload(executeFunctions, itemIndex);
+	const resolvedModel = resolveMetadataModel(modelPayload);
 	const body: IDataObject = {
-		...buildModelPayload(executeFunctions, itemIndex),
+		...modelPayload,
 		messages: buildMessages(executeFunctions, itemIndex),
 	};
 	const temperature = executeFunctions.getNodeParameter('temperature', itemIndex) as number | string;
@@ -581,6 +670,7 @@ function buildRequestBody(executeFunctions: IExecuteFunctions, itemIndex: number
 		false,
 	) as boolean;
 	const session = executeFunctions.getNodeParameter('session', itemIndex, {}) as IDataObject;
+	body.metadata = buildMetadata(executeFunctions, itemIndex, resolvedModel);
 
 	if (!isUnset(temperature)) {
 		body.temperature = temperature as number;
@@ -635,6 +725,97 @@ function buildRequestBody(executeFunctions: IExecuteFunctions, itemIndex: number
 	addOptionalText(executeFunctions, body, 'session_id', session.sessionId, 'Session ID');
 
 	return body;
+}
+
+function buildHeaders(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
+	const headers: IDataObject = {};
+	const langfuseTrace = executeFunctions.getNodeParameter('langfuseTrace', itemIndex, true) as boolean;
+	const customHeaders = executeFunctions.getNodeParameter('headers', itemIndex, {}) as {
+		values?: Array<{ name?: string; value?: string }>;
+	};
+
+	if (langfuseTrace) {
+		headers['langfuse-trace-id'] = executeFunctions.getExecutionId();
+	}
+
+	for (const header of customHeaders.values ?? []) {
+		const name = header.name ?? '';
+
+		if (name.trim() === '') {
+			continue;
+		}
+
+		if (PROTECTED_HEADERS.includes(name.toLowerCase() as (typeof PROTECTED_HEADERS)[number])) {
+			throw new NodeOperationError(executeFunctions.getNode(), `${name} is a protected header.`);
+		}
+
+		headers[name] = header.value ?? '';
+	}
+
+	return headers;
+}
+
+function buildMetadata(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+	model: string,
+): IDataObject {
+	const workflow = executeFunctions.getWorkflow();
+	const defaultMetadata: IDataObject = {
+		execution_id: executeFunctions.getExecutionId(),
+		workflow_id: workflow.id,
+		workflow_name: workflow.name,
+		node_name: executeFunctions.getNode().name,
+		item_index: itemIndex,
+		model,
+	};
+	const metadata = { ...defaultMetadata };
+	const extraMetadata = executeFunctions.getNodeParameter('metadata', itemIndex, {}) as {
+		values?: Array<{ key?: string; valueMode?: string; value?: string }>;
+	};
+
+	for (const row of extraMetadata.values ?? []) {
+		const key = row.key?.trim() ?? '';
+
+		if (key === '') {
+			continue;
+		}
+
+		if (Object.prototype.hasOwnProperty.call(defaultMetadata, key)) {
+			throw new NodeOperationError(
+				executeFunctions.getNode(),
+				`${key} conflicts with default metadata.`,
+			);
+		}
+
+		if (row.valueMode === 'json') {
+			try {
+				metadata[key] = JSON.parse(row.value ?? '');
+			} catch {
+				throw new NodeOperationError(
+					executeFunctions.getNode(),
+					`${key} metadata value must be valid JSON.`,
+				);
+			}
+			continue;
+		}
+
+		metadata[key] = row.value ?? '';
+	}
+
+	return metadata;
+}
+
+function resolveMetadataModel(modelPayload: IDataObject): string {
+	if (typeof modelPayload.model === 'string') {
+		return modelPayload.model;
+	}
+
+	if (Array.isArray(modelPayload.models) && typeof modelPayload.models[0] === 'string') {
+		return modelPayload.models[0];
+	}
+
+	return '';
 }
 
 function buildModelPayload(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {

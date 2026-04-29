@@ -5,3 +5,4 @@
 - Added package wiring, README content, and tests for the initial chat completion path.
 - Added prompt assembly modes, model lookup, model variants, and fallback model payload handling.
 - Added typed generation, reasoning, advanced sampling, response-healing, and session controls.
+- Added custom request headers, Langfuse trace header support, and request body metadata.

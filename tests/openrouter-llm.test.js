@@ -19,6 +19,11 @@ function createExecutionContext(parameters, overrides = {}) {
 				return defaultValue;
 			},
 			getNode: () => ({ name: 'Openrouter LLM', type: 'openrouterLlm' }),
+			getExecutionId: () => overrides.executionId ?? 'exec-1',
+			getWorkflow: () => ({
+				id: overrides.workflowId ?? 'workflow-1',
+				name: overrides.workflowName ?? 'Workflow One',
+			}),
 			getCredentials: async () => ({ baseUrl: 'https://openrouter.ai/api/v1' }),
 			continueOnFail: () => overrides.continueOnFail ?? false,
 			helpers: {
@@ -82,6 +87,14 @@ test('Openrouter LLM posts one chat completion request per input item', async ()
 			{ role: 'system', content: 'Be concise' },
 			{ role: 'user', content: '={{$json.prompt}}' },
 		],
+		metadata: {
+			execution_id: 'exec-1',
+			workflow_id: 'workflow-1',
+			workflow_name: 'Workflow One',
+			node_name: 'Openrouter LLM',
+			item_index: 0,
+			model: 'openai/gpt-4o-mini',
+		},
 		temperature: 0.2,
 		max_tokens: 100,
 	});
@@ -462,4 +475,146 @@ test('Openrouter LLM validates numeric typed controls before making a request', 
 		assert.equal(execution.requests.length, 0);
 		assert.match(result[0][0].json.error, message);
 	}
+});
+
+test('Openrouter LLM sends Langfuse trace headers and body metadata without crossing surfaces', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			langfuseTrace: true,
+			headers: {
+				values: [{ name: 'X-Customer-Trace', value: 'trace-{{$json.id}}' }],
+			},
+			metadata: {
+				values: [
+					{ key: 'tenant', valueMode: 'string', value: 'acme' },
+					{ key: 'payload', valueMode: 'json', value: '{"ok":true}' },
+				],
+			},
+		},
+		{
+			inputItems: [{ json: { id: 'one' } }],
+			executionId: 'exec-123',
+			workflowId: 'wf-123',
+			workflowName: 'Production Workflow',
+		},
+	);
+
+	await node.execute.call(context);
+
+	assert.deepEqual(requests[0].headers, {
+		'langfuse-trace-id': 'exec-123',
+		'X-Customer-Trace': 'trace-{{$json.id}}',
+	});
+	assert.deepEqual(requests[0].body.metadata, {
+		execution_id: 'exec-123',
+		workflow_id: 'wf-123',
+		workflow_name: 'Production Workflow',
+		node_name: 'Openrouter LLM',
+		item_index: 0,
+		model: 'openai/gpt-4o-mini',
+		tenant: 'acme',
+		payload: { ok: true },
+	});
+	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].headers, 'tenant'), false);
+	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body.metadata, 'X-Customer-Trace'), false);
+});
+
+test('Openrouter LLM can disable the Langfuse trace header', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: 'openai/gpt-4o-mini',
+		prompt: 'Hello',
+		temperature: 0.2,
+		maxTokens: 100,
+		langfuseTrace: false,
+	});
+
+	await node.execute.call(context);
+
+	assert.deepEqual(requests[0].headers, {});
+	assert.equal(requests[0].body.metadata.execution_id, 'exec-1');
+});
+
+test('Openrouter LLM rejects protected custom headers before making a request', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const protectedHeaders = ['Authorization', 'http-referer', 'X-Title'];
+
+	for (const headerName of protectedHeaders) {
+		const execution = createExecutionContext(
+			{
+				model: 'openai/gpt-4o-mini',
+				prompt: 'Hello',
+				temperature: 0.2,
+				maxTokens: 100,
+				headers: { values: [{ name: headerName, value: 'bad' }] },
+			},
+			{ continueOnFail: true },
+		);
+
+		const result = await node.execute.call(execution.context);
+
+		assert.equal(execution.requests.length, 0);
+		assert.match(result[0][0].json.error, new RegExp(`${headerName}.*protected`, 'i'));
+	}
+});
+
+test('Openrouter LLM rejects invalid metadata rows before making a request', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const invalidCases = [
+		[
+			{ values: [{ key: 'payload', valueMode: 'json', value: '{bad' }] },
+			/payload.*valid JSON/i,
+		],
+		[
+			{ values: [{ key: 'execution_id', valueMode: 'string', value: 'override' }] },
+			/execution_id.*default metadata/i,
+		],
+	];
+
+	for (const [metadata, message] of invalidCases) {
+		const execution = createExecutionContext(
+			{
+				model: 'openai/gpt-4o-mini',
+				prompt: 'Hello',
+				temperature: 0.2,
+				maxTokens: 100,
+				metadata,
+			},
+			{ continueOnFail: true },
+		);
+
+		const result = await node.execute.call(execution.context);
+
+		assert.equal(execution.requests.length, 0);
+		assert.match(result[0][0].json.error, message);
+	}
+});
+
+test('Openrouter LLM builds metadata per input item', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+		},
+		{ inputItems: [{ json: { id: 1 } }, { json: { id: 2 } }] },
+	);
+
+	await node.execute.call(context);
+
+	assert.equal(requests.length, 2);
+	assert.equal(requests[0].body.metadata.item_index, 0);
+	assert.equal(requests[1].body.metadata.item_index, 1);
 });

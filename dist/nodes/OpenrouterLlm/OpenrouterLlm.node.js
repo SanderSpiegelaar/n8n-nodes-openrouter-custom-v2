@@ -11,6 +11,7 @@ const SUPPORTED_MODEL_VARIANTS = [
     ':nitro',
     ':online',
 ];
+const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'];
 class OpenrouterLlm {
     constructor() {
         this.description = {
@@ -406,6 +407,90 @@ class OpenrouterLlm {
                     description: 'Whether to enable the OpenRouter response-healing plugin',
                 },
                 {
+                    displayName: 'Langfuse Trace',
+                    name: 'langfuseTrace',
+                    type: 'boolean',
+                    default: true,
+                    description: 'Whether to add the Langfuse trace header using the n8n execution identifier',
+                },
+                {
+                    displayName: 'Headers',
+                    name: 'headers',
+                    type: 'fixedCollection',
+                    placeholder: 'Add Header',
+                    default: {},
+                    typeOptions: {
+                        multipleValues: true,
+                    },
+                    options: [
+                        {
+                            displayName: 'Values',
+                            name: 'values',
+                            values: [
+                                {
+                                    displayName: 'Name',
+                                    name: 'name',
+                                    type: 'string',
+                                    default: '',
+                                    description: 'Header name',
+                                },
+                                {
+                                    displayName: 'Value',
+                                    name: 'value',
+                                    type: 'string',
+                                    default: '',
+                                    description: 'Header value',
+                                },
+                            ],
+                        },
+                    ],
+                    description: 'Custom request headers. Authorization and OpenRouter identity headers are protected.',
+                },
+                {
+                    displayName: 'Metadata',
+                    name: 'metadata',
+                    type: 'fixedCollection',
+                    placeholder: 'Add Metadata',
+                    default: {},
+                    typeOptions: {
+                        multipleValues: true,
+                    },
+                    options: [
+                        {
+                            displayName: 'Values',
+                            name: 'values',
+                            values: [
+                                {
+                                    displayName: 'Key',
+                                    name: 'key',
+                                    type: 'string',
+                                    default: '',
+                                    description: 'Metadata key',
+                                },
+                                {
+                                    displayName: 'Value Mode',
+                                    name: 'valueMode',
+                                    type: 'options',
+                                    options: [
+                                        { name: 'JSON', value: 'json' },
+                                        { name: 'String', value: 'string' },
+                                    ],
+                                    default: 'string',
+                                    description: 'How to parse the metadata value',
+                                },
+                                {
+                                    displayName: 'Value',
+                                    name: 'value',
+                                    type: 'string',
+                                    default: '',
+                                    description: 'Metadata value',
+                                },
+                            ],
+                        },
+                    ],
+                    description: 'Extra request metadata sent in the body only',
+                },
+                {
                     displayName: 'Session',
                     name: 'session',
                     type: 'collection',
@@ -468,10 +553,12 @@ class OpenrouterLlm {
                 const credentials = await this.getCredentials('openRouterApi');
                 const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
                 const body = buildRequestBody(this, itemIndex);
+                const headers = buildHeaders(this, itemIndex);
                 const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'openRouterApi', {
                     method: 'POST',
                     baseURL: baseUrl,
                     url: '/chat/completions',
+                    headers,
                     json: true,
                     body,
                 }));
@@ -504,8 +591,10 @@ class OpenrouterLlm {
 }
 exports.OpenrouterLlm = OpenrouterLlm;
 function buildRequestBody(executeFunctions, itemIndex) {
+    const modelPayload = buildModelPayload(executeFunctions, itemIndex);
+    const resolvedModel = resolveMetadataModel(modelPayload);
     const body = {
-        ...buildModelPayload(executeFunctions, itemIndex),
+        ...modelPayload,
         messages: buildMessages(executeFunctions, itemIndex),
     };
     const temperature = executeFunctions.getNodeParameter('temperature', itemIndex);
@@ -515,6 +604,7 @@ function buildRequestBody(executeFunctions, itemIndex) {
     const reasoning = buildReasoning(executeFunctions, executeFunctions.getNodeParameter('reasoning', itemIndex, {}));
     const responseHealing = executeFunctions.getNodeParameter('responseHealing', itemIndex, false);
     const session = executeFunctions.getNodeParameter('session', itemIndex, {});
+    body.metadata = buildMetadata(executeFunctions, itemIndex, resolvedModel);
     if (!isUnset(temperature)) {
         body.temperature = temperature;
     }
@@ -552,6 +642,69 @@ function buildRequestBody(executeFunctions, itemIndex) {
     }
     addOptionalText(executeFunctions, body, 'session_id', session.sessionId, 'Session ID');
     return body;
+}
+function buildHeaders(executeFunctions, itemIndex) {
+    var _a, _b, _c;
+    const headers = {};
+    const langfuseTrace = executeFunctions.getNodeParameter('langfuseTrace', itemIndex, true);
+    const customHeaders = executeFunctions.getNodeParameter('headers', itemIndex, {});
+    if (langfuseTrace) {
+        headers['langfuse-trace-id'] = executeFunctions.getExecutionId();
+    }
+    for (const header of (_a = customHeaders.values) !== null && _a !== void 0 ? _a : []) {
+        const name = (_b = header.name) !== null && _b !== void 0 ? _b : '';
+        if (name.trim() === '') {
+            continue;
+        }
+        if (PROTECTED_HEADERS.includes(name.toLowerCase())) {
+            throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `${name} is a protected header.`);
+        }
+        headers[name] = (_c = header.value) !== null && _c !== void 0 ? _c : '';
+    }
+    return headers;
+}
+function buildMetadata(executeFunctions, itemIndex, model) {
+    var _a, _b, _c, _d, _e;
+    const workflow = executeFunctions.getWorkflow();
+    const defaultMetadata = {
+        execution_id: executeFunctions.getExecutionId(),
+        workflow_id: workflow.id,
+        workflow_name: workflow.name,
+        node_name: executeFunctions.getNode().name,
+        item_index: itemIndex,
+        model,
+    };
+    const metadata = { ...defaultMetadata };
+    const extraMetadata = executeFunctions.getNodeParameter('metadata', itemIndex, {});
+    for (const row of (_a = extraMetadata.values) !== null && _a !== void 0 ? _a : []) {
+        const key = (_c = (_b = row.key) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : '';
+        if (key === '') {
+            continue;
+        }
+        if (Object.prototype.hasOwnProperty.call(defaultMetadata, key)) {
+            throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `${key} conflicts with default metadata.`);
+        }
+        if (row.valueMode === 'json') {
+            try {
+                metadata[key] = JSON.parse((_d = row.value) !== null && _d !== void 0 ? _d : '');
+            }
+            catch {
+                throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `${key} metadata value must be valid JSON.`);
+            }
+            continue;
+        }
+        metadata[key] = (_e = row.value) !== null && _e !== void 0 ? _e : '';
+    }
+    return metadata;
+}
+function resolveMetadataModel(modelPayload) {
+    if (typeof modelPayload.model === 'string') {
+        return modelPayload.model;
+    }
+    if (Array.isArray(modelPayload.models) && typeof modelPayload.models[0] === 'string') {
+        return modelPayload.models[0];
+    }
+    return '';
 }
 function buildModelPayload(executeFunctions, itemIndex) {
     const model = resolvePrimaryModel(executeFunctions, itemIndex);
