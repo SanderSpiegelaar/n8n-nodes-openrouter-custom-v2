@@ -430,6 +430,53 @@ export class OpenrouterLlm implements INodeType {
 				description: 'Whether to enable the OpenRouter response-healing plugin',
 			},
 			{
+				displayName: 'Web Search Plugin',
+				name: 'webPlugin',
+				type: 'collection',
+				placeholder: 'Add Web Search Option',
+				default: {},
+				options: [
+					{
+						displayName: 'Enabled',
+						name: 'enabled',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to enable the OpenRouter web search plugin',
+					},
+					{
+						displayName: 'Max Results',
+						name: 'maxResults',
+						type: 'number',
+						typeOptions: {
+							minValue: 1,
+							maxValue: 10,
+						},
+						default: '',
+						displayOptions: {
+							show: {
+								enabled: [true],
+							},
+						},
+						description: 'Maximum number of web results to attach to the request',
+					},
+					{
+						displayName: 'Search Prompt',
+						name: 'searchPrompt',
+						type: 'string',
+						typeOptions: {
+							rows: 3,
+						},
+						default: '',
+						displayOptions: {
+							show: {
+								enabled: [true],
+							},
+						},
+						description: 'Custom prompt prefix the web plugin should use when summarizing results',
+					},
+				],
+			},
+			{
 				displayName: 'Langfuse Trace',
 				name: 'langfuseTrace',
 				type: 'boolean',
@@ -734,7 +781,8 @@ export class OpenrouterLlm implements INodeType {
 						: (this.getNodeParameter('maxValidationAttempts', itemIndex, 3) as number);
 				const compiledValidator = outputMode === 'json_schema' ? compileSchema(this, itemIndex) : undefined;
 				const provider = buildProvider(this, itemIndex, outputMode);
-				validateRouting(this, modelVariant, provider);
+				const webPluginEnabled = buildWebPlugin(this, itemIndex) !== undefined;
+				validateRouting(this, modelVariant, provider, webPluginEnabled);
 				const headers = buildHeaders(this, itemIndex);
 
 				let attempt = 1;
@@ -939,8 +987,20 @@ function buildRequestBody(
 		body.transforms = advancedSampling.transforms;
 	}
 
+	const plugins: IDataObject[] = [];
+
 	if (responseHealing) {
-		body.plugins = [{ id: 'response-healing' }];
+		plugins.push({ id: 'response-healing' });
+	}
+
+	const webPlugin = buildWebPlugin(executeFunctions, itemIndex);
+
+	if (webPlugin !== undefined) {
+		plugins.push(webPlugin);
+	}
+
+	if (plugins.length > 0) {
+		body.plugins = plugins;
 	}
 
 	addOptionalText(executeFunctions, body, 'session_id', session.sessionId, 'Session ID');
@@ -1430,6 +1490,33 @@ function buildCorrectiveMessage(errors: string[]): string {
 	return `Your previous response failed validation. Errors:\n${top}\nReturn only valid JSON matching the original schema. Do not repeat the schema.`;
 }
 
+function buildWebPlugin(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+): IDataObject | undefined {
+	const config = executeFunctions.getNodeParameter('webPlugin', itemIndex, {}) as {
+		enabled?: boolean;
+		maxResults?: number | string;
+		searchPrompt?: string;
+	};
+
+	if (config.enabled !== true) {
+		return undefined;
+	}
+
+	const plugin: IDataObject = { id: 'web' };
+
+	if (!isUnset(config.maxResults)) {
+		plugin.max_results = validatePositiveNumber(executeFunctions, config.maxResults, 'Web Search Max Results');
+	}
+
+	if (typeof config.searchPrompt === 'string' && config.searchPrompt.trim() !== '') {
+		plugin.search_prompt = config.searchPrompt;
+	}
+
+	return plugin;
+}
+
 function truncateForError(text: string): string {
 	const limit = 2000;
 	return text.length <= limit ? text : `${text.slice(0, limit)}...[truncated]`;
@@ -1439,7 +1526,15 @@ function validateRouting(
 	executeFunctions: IExecuteFunctions,
 	modelVariant: string,
 	provider: IDataObject | undefined,
+	webPluginEnabled: boolean = false,
 ): void {
+	if (webPluginEnabled && modelVariant === ':online') {
+		throw new NodeOperationError(
+			executeFunctions.getNode(),
+			'Model Variant :online conflicts with the Web Search Plugin. Disable one of the two — both routes inject web search results.',
+		);
+	}
+
 	if (provider === undefined) {
 		return;
 	}
