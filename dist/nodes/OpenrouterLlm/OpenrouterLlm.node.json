@@ -1,0 +1,18 @@
+{
+    "node": "n8n-nodes-openrouter-visymo-v2.openrouterLlm",
+    "nodeVersion": "1.0",
+    "codexVersion": "1.0",
+    "categories": ["Development", "AI"],
+    "resources": {
+        "credentialDocumentation": [
+            {
+                "url": "https://github.com/sanderspiegelaar/n8n-nodes-openrouter-visymo-v2?tab=readme-ov-file#credentials"
+            }
+        ],
+        "primaryDocumentation": [
+            {
+                "url": "https://github.com/sanderspiegelaar/n8n-nodes-openrouter-visymo-v2?tab=readme-ov-file"
+            }
+        ]
+    }
+}

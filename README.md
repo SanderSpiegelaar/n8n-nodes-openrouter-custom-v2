@@ -1,8 +1,9 @@
 # n8n-nodes-openrouter-visymo-v2
 
-This is an n8n community node. It lets you use _app/service name_ in your n8n workflows.
+This is an n8n community node for sending chat completion requests through
+OpenRouter.
 
-_App/service name_ is _one or two sentences describing the service this node integrates with_.
+OpenRouter provides one API for routing prompts to many hosted language models.
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/sustainable-use-license/) workflow automation platform.
 
@@ -20,27 +21,36 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 
 ## Operations
 
-_List the operations supported by your node._
+- Openrouter LLM: send one prompt per incoming n8n item to
+  `POST /chat/completions` and return the generated text plus the raw response.
 
 ## Credentials
 
-_If users need to authenticate with the app/service, provide details here. You should include prerequisites (such as signing up with the service), available authentication methods, and how to set them up._
+Create an OpenRouter API key, then add an `OpenRouter API` credential in n8n.
+The credential supports:
+
+- API key
+- Base URL override for OpenRouter-compatible endpoints
+- Optional site URL for OpenRouter attribution
+- Optional app name for OpenRouter attribution
 
 ## Compatibility
 
-_State the minimum n8n version, as well as which versions you test against. You can also include any known version incompatibility issues._
+Built with the n8n community node tooling and tested against the package
+versions in this repository.
 
 ## Usage
 
-_This is an optional section. Use it to help users with any difficult or confusing aspects of the node._
-
-_By the time users are looking for community nodes, they probably already know n8n basics. But if you expect new users, you can link to the [Try it out](https://docs.n8n.io/try-it-out/) documentation to help them get started._
+Add the Openrouter LLM node to a workflow, select an OpenRouter model ID, and
+provide a prompt. Expressions can read each incoming item, so one node execution
+can make one chat completion request per item.
 
 ## Resources
 
 * [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
-* _Link to app/service documentation._
+* [OpenRouter documentation](https://openrouter.ai/docs)
 
 ## Version history
 
-_This is another optional section. If your node has multiple versions, include a short description of available versions and what changed, as well as any compatibility impact._
+- 0.1.0: Initial Openrouter LLM shell with API key credentials and chat
+  completions support.

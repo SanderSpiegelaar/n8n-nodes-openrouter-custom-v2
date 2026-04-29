@@ -1,11 +1,14 @@
 {
     "name": "n8n-nodes-openrouter-visymo-v2",
     "version": "0.1.0",
-    "description": "",
+    "description": "n8n community node for sending chat completion requests through OpenRouter.",
     "license": "MIT",
     "homepage": "",
     "keywords": [
-        "n8n-community-node-package"
+        "n8n-community-node-package",
+        "openrouter",
+        "llm",
+        "ai"
     ],
     "author": {
         "name": "Sander Spiegelaar",
@@ -13,7 +16,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/<...>/n8n-nodes-<...>.git"
+        "url": "https://github.com/sanderspiegelaar/n8n-nodes-openrouter-visymo-v2.git"
     },
     "scripts": {
         "build": "n8n-node build",
@@ -21,6 +24,7 @@
         "dev": "n8n-node dev",
         "lint": "n8n-node lint",
         "lint:fix": "n8n-node lint --fix",
+        "test": "npm run build && node --test tests/*.test.js",
         "release": "n8n-node release",
         "prepublishOnly": "n8n-node prerelease"
     },
@@ -30,9 +34,11 @@
     "n8n": {
         "n8nNodesApiVersion": 1,
         "strict": true,
-        "credentials": [],
+        "credentials": [
+            "dist/credentials/OpenRouterApi.credentials.js"
+        ],
         "nodes": [
-            "dist/nodes/Example/Example.node.js"
+            "dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js"
         ]
     },
     "devDependencies": {
