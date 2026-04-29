@@ -491,6 +491,95 @@ class OpenrouterLlm {
                     description: 'Extra request metadata sent in the body only',
                 },
                 {
+                    displayName: 'Allow Providers',
+                    name: 'providerAllow',
+                    type: 'fixedCollection',
+                    placeholder: 'Add Allowed Provider',
+                    default: {},
+                    typeOptions: {
+                        multipleValues: true,
+                    },
+                    options: [
+                        {
+                            displayName: 'Values',
+                            name: 'values',
+                            values: [
+                                {
+                                    displayName: 'Name',
+                                    name: 'name',
+                                    type: 'string',
+                                    default: '',
+                                    description: 'Provider slug to allow. Empty rows are skipped.',
+                                },
+                            ],
+                        },
+                    ],
+                    description: 'Restrict routing to these providers (maps to provider.only)',
+                },
+                {
+                    displayName: 'Deny Providers',
+                    name: 'providerDeny',
+                    type: 'fixedCollection',
+                    placeholder: 'Add Denied Provider',
+                    default: {},
+                    typeOptions: {
+                        multipleValues: true,
+                    },
+                    options: [
+                        {
+                            displayName: 'Values',
+                            name: 'values',
+                            values: [
+                                {
+                                    displayName: 'Name',
+                                    name: 'name',
+                                    type: 'string',
+                                    default: '',
+                                    description: 'Provider slug to ignore. Empty rows are skipped.',
+                                },
+                            ],
+                        },
+                    ],
+                    description: 'Exclude these providers from routing (maps to provider.ignore)',
+                },
+                {
+                    displayName: 'Provider Sort',
+                    name: 'providerSort',
+                    type: 'options',
+                    options: [
+                        { name: 'Default', value: '' },
+                        { name: 'Latency', value: 'latency' },
+                        { name: 'Price', value: 'price' },
+                        { name: 'Throughput', value: 'throughput' },
+                    ],
+                    default: '',
+                    description: 'How OpenRouter should sort eligible providers. Default omits the field.',
+                },
+                {
+                    displayName: 'Allow Fallbacks',
+                    name: 'providerAllowFallbacks',
+                    type: 'options',
+                    options: [
+                        { name: 'Default', value: '' },
+                        { name: 'False', value: 'false' },
+                        { name: 'True', value: 'true' },
+                    ],
+                    default: '',
+                    description: 'Override provider.allow_fallbacks. Default leaves the field unset on the wire.',
+                },
+                {
+                    displayName: 'Require Parameters Override',
+                    name: 'providerRequireParameters',
+                    type: 'options',
+                    options: [
+                        { name: 'Default', value: '' },
+                        { name: 'False', value: 'false' },
+                        { name: 'True', value: 'true' },
+                    ],
+                    default: '',
+                    description: 'Override provider.require_parameters. Default leaves the field unset on the wire.',
+                },
+                {
                     displayName: 'Session',
                     name: 'session',
                     type: 'collection',
@@ -552,7 +641,13 @@ class OpenrouterLlm {
             try {
                 const credentials = await this.getCredentials('openRouterApi');
                 const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
+                const modelVariant = this.getNodeParameter('modelVariant', itemIndex, '');
+                const provider = buildProvider(this, itemIndex);
+                validateRouting(this, modelVariant, provider);
                 const body = buildRequestBody(this, itemIndex);
+                if (provider !== undefined) {
+                    body.provider = provider;
+                }
                 const headers = buildHeaders(this, itemIndex);
                 const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'openRouterApi', {
                     method: 'POST',
@@ -866,5 +961,56 @@ function validateNonEmptyText(executeFunctions, value, label) {
         throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `${label} must not be empty.`);
     }
     return value;
+}
+function collectProviderNames(executeFunctions, itemIndex, parameter) {
+    var _a;
+    const collection = executeFunctions.getNodeParameter(parameter, itemIndex, {});
+    return ((_a = collection.values) !== null && _a !== void 0 ? _a : [])
+        .map((row) => { var _a, _b; return (_b = (_a = row.name) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : ''; })
+        .filter((name) => name !== '');
+}
+function buildProvider(executeFunctions, itemIndex) {
+    const provider = {};
+    const allow = collectProviderNames(executeFunctions, itemIndex, 'providerAllow');
+    const deny = collectProviderNames(executeFunctions, itemIndex, 'providerDeny');
+    const sort = executeFunctions.getNodeParameter('providerSort', itemIndex, '');
+    const allowFallbacks = executeFunctions.getNodeParameter('providerAllowFallbacks', itemIndex, '');
+    const requireParameters = executeFunctions.getNodeParameter('providerRequireParameters', itemIndex, '');
+    if (allow.length > 0) {
+        provider.only = allow;
+    }
+    if (deny.length > 0) {
+        provider.ignore = deny;
+    }
+    if (sort !== '') {
+        provider.sort = sort;
+    }
+    if (allowFallbacks === 'true' || allowFallbacks === 'false') {
+        provider.allow_fallbacks = allowFallbacks === 'true';
+    }
+    if (requireParameters === 'true' || requireParameters === 'false') {
+        provider.require_parameters = requireParameters === 'true';
+    }
+    return Object.keys(provider).length === 0 ? undefined : provider;
+}
+function validateRouting(executeFunctions, modelVariant, provider) {
+    if (provider === undefined) {
+        return;
+    }
+    if (provider.sort !== undefined && modelVariant === ':nitro') {
+        throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'Model Variant :nitro conflicts with Provider Sort. Remove one of the two — :nitro already requests throughput routing.');
+    }
+    if (provider.sort !== undefined && modelVariant === ':floor') {
+        throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'Model Variant :floor conflicts with Provider Sort. Remove one of the two — :floor already requests price routing.');
+    }
+    const allow = Array.isArray(provider.only) ? provider.only : [];
+    const deny = Array.isArray(provider.ignore) ? provider.ignore : [];
+    if (allow.length > 0 && deny.length > 0) {
+        const denyNormalized = new Set(deny.map((name) => name.trim().toLowerCase()));
+        const conflict = allow.find((name) => denyNormalized.has(name.trim().toLowerCase()));
+        if (conflict !== undefined) {
+            throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `Provider "${conflict}" appears in both Allow Providers and Deny Providers. Remove it from one list.`);
+        }
+    }
 }
 //# sourceMappingURL=OpenrouterLlm.node.js.map

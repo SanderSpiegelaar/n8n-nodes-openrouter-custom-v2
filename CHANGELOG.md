@@ -6,3 +6,4 @@
 - Added prompt assembly modes, model lookup, model variants, and fallback model payload handling.
 - Added typed generation, reasoning, advanced sampling, response-healing, and session controls.
 - Added custom request headers, Langfuse trace header support, and request body metadata.
+- Added provider routing controls (allow/deny lists, sort, allow_fallbacks, require_parameters override) with conflict validation against `:nitro`/`:floor` model variants and overlapping allow/deny entries.

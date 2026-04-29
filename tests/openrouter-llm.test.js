@@ -618,3 +618,170 @@ test('Openrouter LLM builds metadata per input item', async () => {
 	assert.equal(requests[0].body.metadata.item_index, 0);
 	assert.equal(requests[1].body.metadata.item_index, 1);
 });
+
+test('Openrouter LLM omits the provider key entirely when no provider routing is configured', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: 'openai/gpt-4o-mini',
+		prompt: 'Hello',
+		temperature: 0.2,
+		maxTokens: 100,
+	});
+
+	await node.execute.call(context);
+
+	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'provider'), false);
+});
+
+test('Openrouter LLM maps allow and deny provider lists to provider.only and provider.ignore', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: 'openai/gpt-4o-mini',
+		prompt: 'Hello',
+		temperature: 0.2,
+		maxTokens: 100,
+		providerAllow: {
+			values: [{ name: 'anthropic' }, { name: '' }, { name: 'openai' }],
+		},
+		providerDeny: {
+			values: [{ name: 'fireworks' }, { name: '   ' }],
+		},
+	});
+
+	await node.execute.call(context);
+
+	assert.deepEqual(requests[0].body.provider, {
+		only: ['anthropic', 'openai'],
+		ignore: ['fireworks'],
+	});
+});
+
+test('Openrouter LLM maps provider sort, allow_fallbacks, and require_parameters when set', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: 'openai/gpt-4o-mini',
+		prompt: 'Hello',
+		temperature: 0.2,
+		maxTokens: 100,
+		providerSort: 'price',
+		providerAllowFallbacks: 'false',
+		providerRequireParameters: 'true',
+	});
+
+	await node.execute.call(context);
+
+	assert.deepEqual(requests[0].body.provider, {
+		sort: 'price',
+		allow_fallbacks: false,
+		require_parameters: true,
+	});
+});
+
+test('Openrouter LLM omits provider three-state fields by default', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: 'openai/gpt-4o-mini',
+		prompt: 'Hello',
+		temperature: 0.2,
+		maxTokens: 100,
+		providerSort: '',
+		providerAllowFallbacks: '',
+		providerRequireParameters: '',
+	});
+
+	await node.execute.call(context);
+
+	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'provider'), false);
+});
+
+test('Openrouter LLM rejects nitro variant combined with provider sort before making a request', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			modelVariant: ':nitro',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			providerSort: 'throughput',
+		},
+		{ continueOnFail: true },
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.equal(requests.length, 0);
+	assert.match(result[0][0].json.error, /nitro/i);
+	assert.match(result[0][0].json.error, /provider sort/i);
+});
+
+test('Openrouter LLM rejects floor variant combined with provider sort before making a request', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			modelVariant: ':floor',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			providerSort: 'price',
+		},
+		{ continueOnFail: true },
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.equal(requests.length, 0);
+	assert.match(result[0][0].json.error, /floor/i);
+	assert.match(result[0][0].json.error, /provider sort/i);
+});
+
+test('Openrouter LLM rejects providers appearing in both allow and deny lists case-insensitively', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			maxTokens: 100,
+			providerAllow: { values: [{ name: '  Anthropic ' }] },
+			providerDeny: { values: [{ name: 'anthropic' }] },
+		},
+		{ continueOnFail: true },
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.equal(requests.length, 0);
+	assert.match(result[0][0].json.error, /anthropic/i);
+});
+
+test('Openrouter LLM allows exacto variant combined with allow and deny provider lists', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: 'openai/gpt-4o-mini',
+		modelVariant: ':exacto',
+		prompt: 'Hello',
+		temperature: 0.2,
+		maxTokens: 100,
+		providerAllow: { values: [{ name: 'anthropic' }] },
+		providerDeny: { values: [{ name: 'fireworks' }] },
+	});
+
+	await node.execute.call(context);
+
+	assert.equal(requests.length, 1);
+	assert.deepEqual(requests[0].body.provider, {
+		only: ['anthropic'],
+		ignore: ['fireworks'],
+	});
+	assert.equal(requests[0].body.model, 'openai/gpt-4o-mini:exacto');
+});

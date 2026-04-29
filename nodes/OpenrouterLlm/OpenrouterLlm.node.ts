@@ -512,6 +512,95 @@ export class OpenrouterLlm implements INodeType {
 				description: 'Extra request metadata sent in the body only',
 			},
 			{
+				displayName: 'Allow Providers',
+				name: 'providerAllow',
+				type: 'fixedCollection',
+				placeholder: 'Add Allowed Provider',
+				default: {},
+				typeOptions: {
+					multipleValues: true,
+				},
+				options: [
+					{
+						displayName: 'Values',
+						name: 'values',
+						values: [
+							{
+								displayName: 'Name',
+								name: 'name',
+								type: 'string',
+								default: '',
+								description: 'Provider slug to allow. Empty rows are skipped.',
+							},
+						],
+					},
+				],
+				description: 'Restrict routing to these providers (maps to provider.only)',
+			},
+			{
+				displayName: 'Deny Providers',
+				name: 'providerDeny',
+				type: 'fixedCollection',
+				placeholder: 'Add Denied Provider',
+				default: {},
+				typeOptions: {
+					multipleValues: true,
+				},
+				options: [
+					{
+						displayName: 'Values',
+						name: 'values',
+						values: [
+							{
+								displayName: 'Name',
+								name: 'name',
+								type: 'string',
+								default: '',
+								description: 'Provider slug to ignore. Empty rows are skipped.',
+							},
+						],
+					},
+				],
+				description: 'Exclude these providers from routing (maps to provider.ignore)',
+			},
+			{
+				displayName: 'Provider Sort',
+				name: 'providerSort',
+				type: 'options',
+				options: [
+					{ name: 'Default', value: '' },
+					{ name: 'Latency', value: 'latency' },
+					{ name: 'Price', value: 'price' },
+					{ name: 'Throughput', value: 'throughput' },
+				],
+				default: '',
+				description: 'How OpenRouter should sort eligible providers. Default omits the field.',
+			},
+			{
+				displayName: 'Allow Fallbacks',
+				name: 'providerAllowFallbacks',
+				type: 'options',
+				options: [
+					{ name: 'Default', value: '' },
+					{ name: 'False', value: 'false' },
+					{ name: 'True', value: 'true' },
+				],
+				default: '',
+				description: 'Override provider.allow_fallbacks. Default leaves the field unset on the wire.',
+			},
+			{
+				displayName: 'Require Parameters Override',
+				name: 'providerRequireParameters',
+				type: 'options',
+				options: [
+					{ name: 'Default', value: '' },
+					{ name: 'False', value: 'false' },
+					{ name: 'True', value: 'true' },
+				],
+				default: '',
+				description: 'Override provider.require_parameters. Default leaves the field unset on the wire.',
+			},
+			{
 				displayName: 'Session',
 				name: 'session',
 				type: 'collection',
@@ -581,7 +670,15 @@ export class OpenrouterLlm implements INodeType {
 			try {
 				const credentials = await this.getCredentials('openRouterApi');
 				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
+				const modelVariant = this.getNodeParameter('modelVariant', itemIndex, '') as string;
+				const provider = buildProvider(this, itemIndex);
+				validateRouting(this, modelVariant, provider);
 				const body = buildRequestBody(this, itemIndex);
+
+				if (provider !== undefined) {
+					body.provider = provider;
+				}
+
 				const headers = buildHeaders(this, itemIndex);
 
 				const response = (await this.helpers.httpRequestWithAuthentication.call(
@@ -1065,4 +1162,99 @@ function validateNonEmptyText(
 	}
 
 	return value;
+}
+
+function collectProviderNames(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+	parameter: string,
+): string[] {
+	const collection = executeFunctions.getNodeParameter(parameter, itemIndex, {}) as {
+		values?: Array<{ name?: string }>;
+	};
+
+	return (collection.values ?? [])
+		.map((row) => row.name?.trim() ?? '')
+		.filter((name) => name !== '');
+}
+
+function buildProvider(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+): IDataObject | undefined {
+	const provider: IDataObject = {};
+	const allow = collectProviderNames(executeFunctions, itemIndex, 'providerAllow');
+	const deny = collectProviderNames(executeFunctions, itemIndex, 'providerDeny');
+	const sort = executeFunctions.getNodeParameter('providerSort', itemIndex, '') as string;
+	const allowFallbacks = executeFunctions.getNodeParameter(
+		'providerAllowFallbacks',
+		itemIndex,
+		'',
+	) as string;
+	const requireParameters = executeFunctions.getNodeParameter(
+		'providerRequireParameters',
+		itemIndex,
+		'',
+	) as string;
+
+	if (allow.length > 0) {
+		provider.only = allow;
+	}
+
+	if (deny.length > 0) {
+		provider.ignore = deny;
+	}
+
+	if (sort !== '') {
+		provider.sort = sort;
+	}
+
+	if (allowFallbacks === 'true' || allowFallbacks === 'false') {
+		provider.allow_fallbacks = allowFallbacks === 'true';
+	}
+
+	if (requireParameters === 'true' || requireParameters === 'false') {
+		provider.require_parameters = requireParameters === 'true';
+	}
+
+	return Object.keys(provider).length === 0 ? undefined : provider;
+}
+
+function validateRouting(
+	executeFunctions: IExecuteFunctions,
+	modelVariant: string,
+	provider: IDataObject | undefined,
+): void {
+	if (provider === undefined) {
+		return;
+	}
+
+	if (provider.sort !== undefined && modelVariant === ':nitro') {
+		throw new NodeOperationError(
+			executeFunctions.getNode(),
+			'Model Variant :nitro conflicts with Provider Sort. Remove one of the two — :nitro already requests throughput routing.',
+		);
+	}
+
+	if (provider.sort !== undefined && modelVariant === ':floor') {
+		throw new NodeOperationError(
+			executeFunctions.getNode(),
+			'Model Variant :floor conflicts with Provider Sort. Remove one of the two — :floor already requests price routing.',
+		);
+	}
+
+	const allow = Array.isArray(provider.only) ? (provider.only as string[]) : [];
+	const deny = Array.isArray(provider.ignore) ? (provider.ignore as string[]) : [];
+
+	if (allow.length > 0 && deny.length > 0) {
+		const denyNormalized = new Set(deny.map((name) => name.trim().toLowerCase()));
+		const conflict = allow.find((name) => denyNormalized.has(name.trim().toLowerCase()));
+
+		if (conflict !== undefined) {
+			throw new NodeOperationError(
+				executeFunctions.getNode(),
+				`Provider "${conflict}" appears in both Allow Providers and Deny Providers. Remove it from one list.`,
+			);
+		}
+	}
 }
