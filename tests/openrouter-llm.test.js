@@ -222,3 +222,84 @@ test('Openrouter LLM rejects empty prompts and message content before making a r
 	assert.match(emptyMessagesResult[0][0].json.error, /must contain at least one message/i);
 	assert.match(emptyMessageContentResult[0][0].json.error, /message 1 content must not be empty/i);
 });
+
+test('Openrouter LLM appends selected primary model variants after normalizing suffixes', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: 'anthropic/claude-3.5-sonnet:free',
+		modelVariant: ':nitro',
+		prompt: 'Hello',
+		temperature: 0.2,
+		maxTokens: 100,
+	});
+
+	await node.execute.call(context);
+
+	assert.equal(requests[0].body.model, 'anthropic/claude-3.5-sonnet:nitro');
+	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'models'), false);
+});
+
+test('Openrouter LLM sends fallback chains with models and no model field', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: { mode: 'list', value: 'openai/gpt-4o-mini' },
+		modelVariant: ':exacto',
+		fallbackModels: {
+			values: [{ model: 'anthropic/claude-3-haiku' }, { model: 'google/gemini-flash-1.5' }],
+		},
+		prompt: 'Hello',
+		temperature: 0.2,
+		maxTokens: 100,
+	});
+
+	await node.execute.call(context);
+
+	assert.deepEqual(requests[0].body.models, [
+		'openai/gpt-4o-mini:exacto',
+		'anthropic/claude-3-haiku',
+		'google/gemini-flash-1.5',
+	]);
+	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'model'), false);
+});
+
+test('Openrouter LLM loads searchable text model options from OpenRouter', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const requests = [];
+	const context = {
+		getCredentials: async () => ({ baseUrl: 'https://openrouter.ai/api/v1' }),
+		helpers: {
+			httpRequestWithAuthentication: async (_credentialType, requestOptions) => {
+				requests.push(requestOptions);
+				return {
+					data: [
+						{
+							id: 'openai/gpt-4o-mini',
+							name: 'GPT-4o Mini',
+							architecture: { output_modalities: ['text'] },
+						},
+						{
+							id: 'image/model',
+							name: 'Image Model',
+							architecture: { output_modalities: ['image'] },
+						},
+						{
+							id: 'openrouter/auto',
+							name: 'Auto Router',
+							architecture: { output_modalities: ['text'] },
+						},
+					],
+				};
+			},
+		},
+	};
+
+	const result = await node.methods.listSearch.getOpenRouterModels.call(context, 'gpt');
+
+	assert.equal(requests[0].method, 'GET');
+	assert.equal(requests[0].baseURL, 'https://openrouter.ai/api/v1');
+	assert.equal(requests[0].url, '/models');
+	assert.deepEqual(result.results, [{ name: 'GPT-4o Mini', value: 'openai/gpt-4o-mini' }]);
+});
