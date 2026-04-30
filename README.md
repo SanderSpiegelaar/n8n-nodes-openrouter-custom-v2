@@ -1,4 +1,4 @@
-# n8n-nodes-openrouter-visymo-v2
+# n8n-nodes-openrouter-custom-v2
 
 This is an n8n community node for sending chat completion requests through
 OpenRouter.
@@ -47,8 +47,8 @@ can make one chat completion request per item.
 
 ## Resources
 
-* [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
-* [OpenRouter documentation](https://openrouter.ai/docs)
+- [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
+- [OpenRouter documentation](https://openrouter.ai/docs)
 
 ## Version history
 
