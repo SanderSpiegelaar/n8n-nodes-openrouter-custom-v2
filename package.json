@@ -1,5 +1,5 @@
 {
-	"name": "n8n-nodes-openrouter-visymo-v2",
+	"name": "n8n-nodes-openrouter-custom",
 	"version": "0.1.0",
 	"description": "n8n community node for sending chat completion requests through OpenRouter.",
 	"license": "MIT",
