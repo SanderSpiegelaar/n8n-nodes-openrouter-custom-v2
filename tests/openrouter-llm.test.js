@@ -244,7 +244,7 @@ test('Openrouter LLM appends selected primary model variants after normalizing s
 	const node = new OpenrouterLlm();
 	const { context, requests } = createExecutionContext({
 		model: 'anthropic/claude-3.5-sonnet:free',
-		modelVariant: ':nitro',
+		modelOptions: { modelVariant: ':nitro' },
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
@@ -261,9 +261,11 @@ test('Openrouter LLM sends fallback chains with models and no model field', asyn
 	const node = new OpenrouterLlm();
 	const { context, requests } = createExecutionContext({
 		model: { mode: 'list', value: 'openai/gpt-4o-mini' },
-		modelVariant: ':exacto',
-		fallbackModels: {
-			values: [{ model: 'anthropic/claude-3-haiku' }, { model: 'google/gemini-flash-1.5' }],
+		modelOptions: {
+			modelVariant: ':exacto',
+			fallbackModels: {
+				values: [{ model: 'anthropic/claude-3-haiku' }, { model: 'google/gemini-flash-1.5' }],
+			},
 		},
 		prompt: 'Hello',
 		temperature: 0.2,
@@ -343,8 +345,7 @@ test('Openrouter LLM maps typed generation and advanced sampling controls', asyn
 			topA: 0.2,
 			transforms: ['middle-out'],
 		},
-		responseHealing: true,
-		session: { sessionId: 'session-1' },
+		integrations: { responseHealing: true, sessionId: 'session-1' },
 	});
 
 	await node.execute.call(context);
@@ -382,7 +383,7 @@ test('Openrouter LLM strips empty optional controls from the request', async () 
 			seed: '',
 			promptCacheKey: '',
 		},
-		reasoning: { mode: 'off', effort: 'high', maxTokens: 100, exclude: true },
+		reasoning: { mode: 'off', effort: 'high', maxTokens: 100, exclude: false },
 		advancedSampling: {
 			topK: '',
 			repetitionPenalty: '',
@@ -885,7 +886,7 @@ test('Openrouter LLM in json_schema mode sends strict json_schema response_forma
 
 	assert.deepEqual(requests[0].body.response_format, {
 		type: 'json_schema',
-		json_schema: { schema, strict: true },
+		json_schema: { name: 'response', schema, strict: true },
 	});
 	assert.deepEqual(result[0][0].json.structured, { email: 'a@b.co' });
 });
@@ -1329,4 +1330,54 @@ test('Openrouter LLM allows exacto variant combined with allow and deny provider
 		ignore: ['fireworks'],
 	});
 	assert.equal(requests[0].body.model, 'openai/gpt-4o-mini:exacto');
+});
+
+test('Exclude reasoning with mode off still sends reasoning.exclude to the API', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context, requests } = createExecutionContext({
+		model: 'openai/gpt-4o-mini',
+		prompt: 'Hello',
+		temperature: 0.2,
+		reasoning: { mode: 'off', exclude: true },
+	});
+
+	await node.execute.call(context);
+
+	assert.deepEqual(requests[0].body.reasoning, { exclude: true });
+});
+
+test('Exclude reasoning strips reasoning fields from response output', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const { context } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			temperature: 0.2,
+			reasoning: { mode: 'effort', effort: 'medium', exclude: true },
+		},
+		{
+			responder: () => ({
+				id: 'gen-1',
+				choices: [
+					{
+						message: {
+							role: 'assistant',
+							content: 'The answer is 42.',
+							reasoning: 'Let me think step by step...',
+							reasoning_content: 'Internal reasoning trace',
+						},
+					},
+				],
+			}),
+		},
+	);
+
+	const result = await node.execute.call(context);
+	const responseChoices = result[0][0].json.response.choices;
+
+	assert.equal(responseChoices[0].message.content, 'The answer is 42.');
+	assert.equal(responseChoices[0].message.reasoning, undefined);
+	assert.equal(responseChoices[0].message.reasoning_content, undefined);
 });

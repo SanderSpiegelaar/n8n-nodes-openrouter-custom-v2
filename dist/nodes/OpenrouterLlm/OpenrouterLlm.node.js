@@ -65,83 +65,92 @@ class OpenrouterLlm {
                     description: 'OpenRouter model ID to use for the chat completion',
                 },
                 {
-                    displayName: 'Model Variant',
-                    name: 'modelVariant',
-                    type: 'options',
-                    noDataExpression: true,
-                    options: [
-                        {
-                            name: 'Exacto',
-                            value: ':exacto',
-                            description: 'Prefer OpenRouter-curated providers for stronger tool-calling quality',
-                            action: 'Use Exacto routing',
-                        },
-                        {
-                            name: 'Extended',
-                            value: ':extended',
-                            description: 'Use extended context model variants where available',
-                            action: 'Use extended context',
-                        },
-                        {
-                            name: 'Floor',
-                            value: ':floor',
-                            description: 'Use the floor routing variant',
-                            action: 'Use floor routing',
-                        },
-                        {
-                            name: 'Free',
-                            value: ':free',
-                            description: 'Use free model variants where available',
-                            action: 'Use free variant',
-                        },
-                        {
-                            name: 'Nitro',
-                            value: ':nitro',
-                            description: 'Prefer high-throughput providers',
-                            action: 'Use Nitro routing',
-                        },
-                        {
-                            name: 'None',
-                            value: '',
-                            description: 'Use the model ID without adding a variant',
-                            action: 'Use no model variant',
-                        },
-                        {
-                            name: 'Online',
-                            value: ':online',
-                            description: 'Use online-enabled model variants where available',
-                            action: 'Use online variant',
-                        },
-                    ],
-                    default: '',
-                    description: 'Optional OpenRouter model variant to append to the primary model ID',
-                },
-                {
-                    displayName: 'Fallback Models',
-                    name: 'fallbackModels',
-                    type: 'fixedCollection',
-                    placeholder: 'Add Fallback Model',
+                    displayName: 'Model Options',
+                    name: 'modelOptions',
+                    type: 'collection',
+                    placeholder: 'Add Model Option',
                     default: {},
-                    typeOptions: {
-                        multipleValues: true,
-                    },
                     options: [
                         {
-                            displayName: 'Values',
-                            name: 'values',
-                            values: [
+                            displayName: 'Fallback Models',
+                            name: 'fallbackModels',
+                            type: 'fixedCollection',
+                            placeholder: 'Add Fallback Model',
+                            default: {},
+                            typeOptions: {
+                                multipleValues: true,
+                            },
+                            options: [
                                 {
-                                    displayName: 'Model ID',
-                                    name: 'model',
-                                    type: 'string',
-                                    default: '',
-                                    required: true,
-                                    description: 'Fallback model or preset ID to pass to OpenRouter exactly as entered',
+                                    displayName: 'Values',
+                                    name: 'values',
+                                    values: [
+                                        {
+                                            displayName: 'Model ID',
+                                            name: 'model',
+                                            type: 'string',
+                                            default: '',
+                                            required: true,
+                                            description: 'Fallback model or preset ID to pass to OpenRouter exactly as entered',
+                                        },
+                                    ],
                                 },
                             ],
+                            description: 'Fallback models to send in OpenRouter models order after the primary model',
+                        },
+                        {
+                            displayName: 'Model Variant',
+                            name: 'modelVariant',
+                            type: 'options',
+                            noDataExpression: true,
+                            options: [
+                                {
+                                    name: 'Exacto',
+                                    value: ':exacto',
+                                    description: 'Prefer OpenRouter-curated providers for stronger tool-calling quality',
+                                    action: 'Use Exacto routing',
+                                },
+                                {
+                                    name: 'Extended',
+                                    value: ':extended',
+                                    description: 'Use extended context model variants where available',
+                                    action: 'Use extended context',
+                                },
+                                {
+                                    name: 'Floor',
+                                    value: ':floor',
+                                    description: 'Use the floor routing variant',
+                                    action: 'Use floor routing',
+                                },
+                                {
+                                    name: 'Free',
+                                    value: ':free',
+                                    description: 'Use free model variants where available',
+                                    action: 'Use free variant',
+                                },
+                                {
+                                    name: 'Nitro',
+                                    value: ':nitro',
+                                    description: 'Prefer high-throughput providers',
+                                    action: 'Use Nitro routing',
+                                },
+                                {
+                                    name: 'None',
+                                    value: '',
+                                    description: 'Use the model ID without adding a variant',
+                                    action: 'Use no model variant',
+                                },
+                                {
+                                    name: 'Online',
+                                    value: ':online',
+                                    description: 'Use online-enabled model variants where available',
+                                    action: 'Use online variant',
+                                },
+                            ],
+                            default: '',
+                            description: 'Optional OpenRouter model variant to append to the primary model ID',
                         },
                     ],
-                    description: 'Fallback models to send in OpenRouter models order after the primary model',
                 },
                 {
                     displayName: 'Prompt Mode',
@@ -405,29 +414,120 @@ class OpenrouterLlm {
                     ],
                 },
                 {
-                    displayName: 'Response Healing',
-                    name: 'responseHealing',
-                    type: 'boolean',
-                    default: false,
-                    description: 'Whether to enable the OpenRouter response-healing plugin',
-                },
-                {
-                    displayName: 'Web Search Plugin',
-                    name: 'webPlugin',
+                    displayName: 'Integrations',
+                    name: 'integrations',
                     type: 'collection',
-                    placeholder: 'Add Web Search Option',
+                    placeholder: 'Add Integration Option',
                     default: {},
                     options: [
                         {
-                            displayName: 'Enabled',
-                            name: 'enabled',
+                            displayName: 'Headers',
+                            name: 'headers',
+                            type: 'fixedCollection',
+                            placeholder: 'Add Header',
+                            default: {},
+                            typeOptions: {
+                                multipleValues: true,
+                            },
+                            options: [
+                                {
+                                    displayName: 'Values',
+                                    name: 'values',
+                                    values: [
+                                        {
+                                            displayName: 'Name',
+                                            name: 'name',
+                                            type: 'string',
+                                            default: '',
+                                            description: 'Header name',
+                                        },
+                                        {
+                                            displayName: 'Value',
+                                            name: 'value',
+                                            type: 'string',
+                                            default: '',
+                                            description: 'Header value',
+                                        },
+                                    ],
+                                },
+                            ],
+                            description: 'Custom request headers. Authorization and OpenRouter identity headers are protected.',
+                        },
+                        {
+                            displayName: 'Langfuse Trace',
+                            name: 'langfuseTrace',
+                            type: 'boolean',
+                            default: true,
+                            description: 'Whether to add the Langfuse trace header using the n8n execution identifier',
+                        },
+                        {
+                            displayName: 'Metadata',
+                            name: 'metadata',
+                            type: 'fixedCollection',
+                            placeholder: 'Add Metadata',
+                            default: {},
+                            typeOptions: {
+                                multipleValues: true,
+                            },
+                            options: [
+                                {
+                                    displayName: 'Values',
+                                    name: 'values',
+                                    values: [
+                                        {
+                                            displayName: 'Key',
+                                            name: 'key',
+                                            type: 'string',
+                                            default: '',
+                                            description: 'Metadata key',
+                                        },
+                                        {
+                                            displayName: 'Value Mode',
+                                            name: 'valueMode',
+                                            type: 'options',
+                                            options: [
+                                                { name: 'JSON', value: 'json' },
+                                                { name: 'String', value: 'string' },
+                                            ],
+                                            default: 'string',
+                                            description: 'How to parse the metadata value',
+                                        },
+                                        {
+                                            displayName: 'Value',
+                                            name: 'value',
+                                            type: 'string',
+                                            default: '',
+                                            description: 'Metadata value',
+                                        },
+                                    ],
+                                },
+                            ],
+                            description: 'Extra request metadata sent in the body only',
+                        },
+                        {
+                            displayName: 'Response Healing',
+                            name: 'responseHealing',
+                            type: 'boolean',
+                            default: false,
+                            description: 'Whether to enable the OpenRouter response-healing plugin',
+                        },
+                        {
+                            displayName: 'Session ID',
+                            name: 'sessionId',
+                            type: 'string',
+                            default: '',
+                            description: 'OpenRouter session identifier',
+                        },
+                        {
+                            displayName: 'Web Search Enabled',
+                            name: 'webEnabled',
                             type: 'boolean',
                             default: false,
                             description: 'Whether to enable the OpenRouter web search plugin',
                         },
                         {
-                            displayName: 'Max Results',
-                            name: 'maxResults',
+                            displayName: 'Web Search Max Results',
+                            name: 'webMaxResults',
                             type: 'number',
                             typeOptions: {
                                 minValue: 1,
@@ -436,14 +536,14 @@ class OpenrouterLlm {
                             default: '',
                             displayOptions: {
                                 show: {
-                                    enabled: [true],
+                                    webEnabled: [true],
                                 },
                             },
                             description: 'Maximum number of web results to attach to the request',
                         },
                         {
-                            displayName: 'Search Prompt',
-                            name: 'searchPrompt',
+                            displayName: 'Web Search Prompt',
+                            name: 'webSearchPrompt',
                             type: 'string',
                             typeOptions: {
                                 rows: 3,
@@ -451,96 +551,12 @@ class OpenrouterLlm {
                             default: '',
                             displayOptions: {
                                 show: {
-                                    enabled: [true],
+                                    webEnabled: [true],
                                 },
                             },
                             description: 'Custom prompt prefix the web plugin should use when summarizing results',
                         },
                     ],
-                },
-                {
-                    displayName: 'Langfuse Trace',
-                    name: 'langfuseTrace',
-                    type: 'boolean',
-                    default: true,
-                    description: 'Whether to add the Langfuse trace header using the n8n execution identifier',
-                },
-                {
-                    displayName: 'Headers',
-                    name: 'headers',
-                    type: 'fixedCollection',
-                    placeholder: 'Add Header',
-                    default: {},
-                    typeOptions: {
-                        multipleValues: true,
-                    },
-                    options: [
-                        {
-                            displayName: 'Values',
-                            name: 'values',
-                            values: [
-                                {
-                                    displayName: 'Name',
-                                    name: 'name',
-                                    type: 'string',
-                                    default: '',
-                                    description: 'Header name',
-                                },
-                                {
-                                    displayName: 'Value',
-                                    name: 'value',
-                                    type: 'string',
-                                    default: '',
-                                    description: 'Header value',
-                                },
-                            ],
-                        },
-                    ],
-                    description: 'Custom request headers. Authorization and OpenRouter identity headers are protected.',
-                },
-                {
-                    displayName: 'Metadata',
-                    name: 'metadata',
-                    type: 'fixedCollection',
-                    placeholder: 'Add Metadata',
-                    default: {},
-                    typeOptions: {
-                        multipleValues: true,
-                    },
-                    options: [
-                        {
-                            displayName: 'Values',
-                            name: 'values',
-                            values: [
-                                {
-                                    displayName: 'Key',
-                                    name: 'key',
-                                    type: 'string',
-                                    default: '',
-                                    description: 'Metadata key',
-                                },
-                                {
-                                    displayName: 'Value Mode',
-                                    name: 'valueMode',
-                                    type: 'options',
-                                    options: [
-                                        { name: 'JSON', value: 'json' },
-                                        { name: 'String', value: 'string' },
-                                    ],
-                                    default: 'string',
-                                    description: 'How to parse the metadata value',
-                                },
-                                {
-                                    displayName: 'Value',
-                                    name: 'value',
-                                    type: 'string',
-                                    default: '',
-                                    description: 'Metadata value',
-                                },
-                            ],
-                        },
-                    ],
-                    description: 'Extra request metadata sent in the body only',
                 },
                 {
                     displayName: 'Output Mode',
@@ -597,107 +613,100 @@ class OpenrouterLlm {
                     description: 'Maximum total attempts (initial + repair retries) before failing',
                 },
                 {
-                    displayName: 'Allow Providers',
-                    name: 'providerAllow',
-                    type: 'fixedCollection',
-                    placeholder: 'Add Allowed Provider',
-                    default: {},
-                    typeOptions: {
-                        multipleValues: true,
-                    },
-                    options: [
-                        {
-                            displayName: 'Values',
-                            name: 'values',
-                            values: [
-                                {
-                                    displayName: 'Name',
-                                    name: 'name',
-                                    type: 'string',
-                                    default: '',
-                                    description: 'Provider slug to allow. Empty rows are skipped.',
-                                },
-                            ],
-                        },
-                    ],
-                    description: 'Restrict routing to these providers (maps to provider.only)',
-                },
-                {
-                    displayName: 'Deny Providers',
-                    name: 'providerDeny',
-                    type: 'fixedCollection',
-                    placeholder: 'Add Denied Provider',
-                    default: {},
-                    typeOptions: {
-                        multipleValues: true,
-                    },
-                    options: [
-                        {
-                            displayName: 'Values',
-                            name: 'values',
-                            values: [
-                                {
-                                    displayName: 'Name',
-                                    name: 'name',
-                                    type: 'string',
-                                    default: '',
-                                    description: 'Provider slug to ignore. Empty rows are skipped.',
-                                },
-                            ],
-                        },
-                    ],
-                    description: 'Exclude these providers from routing (maps to provider.ignore)',
-                },
-                {
-                    displayName: 'Provider Sort',
-                    name: 'providerSort',
-                    type: 'options',
-                    options: [
-                        { name: 'Default', value: '' },
-                        { name: 'Latency', value: 'latency' },
-                        { name: 'Price', value: 'price' },
-                        { name: 'Throughput', value: 'throughput' },
-                    ],
-                    default: '',
-                    description: 'How OpenRouter should sort eligible providers. Default omits the field.',
-                },
-                {
-                    displayName: 'Allow Fallbacks',
-                    name: 'providerAllowFallbacks',
-                    type: 'options',
-                    options: [
-                        { name: 'Default', value: '' },
-                        { name: 'False', value: 'false' },
-                        { name: 'True', value: 'true' },
-                    ],
-                    default: '',
-                    description: 'Override provider.allow_fallbacks. Default leaves the field unset on the wire.',
-                },
-                {
-                    displayName: 'Require Parameters Override',
-                    name: 'providerRequireParameters',
-                    type: 'options',
-                    options: [
-                        { name: 'Default', value: '' },
-                        { name: 'False', value: 'false' },
-                        { name: 'True', value: 'true' },
-                    ],
-                    default: '',
-                    description: 'Override provider.require_parameters. Default leaves the field unset on the wire.',
-                },
-                {
-                    displayName: 'Session',
-                    name: 'session',
+                    displayName: 'Provider Routing',
+                    name: 'providerRouting',
                     type: 'collection',
-                    placeholder: 'Add Session Option',
+                    placeholder: 'Add Routing Option',
                     default: {},
                     options: [
                         {
-                            displayName: 'Session ID',
-                            name: 'sessionId',
-                            type: 'string',
+                            displayName: 'Allow Fallbacks',
+                            name: 'allowFallbacks',
+                            type: 'options',
+                            options: [
+                                { name: 'Default', value: '' },
+                                { name: 'False', value: 'false' },
+                                { name: 'True', value: 'true' },
+                            ],
                             default: '',
-                            description: 'OpenRouter session identifier',
+                            description: 'Override provider.allow_fallbacks. Default leaves the field unset on the wire.',
+                        },
+                        {
+                            displayName: 'Allow Providers',
+                            name: 'allow',
+                            type: 'fixedCollection',
+                            placeholder: 'Add Allowed Provider',
+                            default: {},
+                            typeOptions: {
+                                multipleValues: true,
+                            },
+                            options: [
+                                {
+                                    displayName: 'Values',
+                                    name: 'values',
+                                    values: [
+                                        {
+                                            displayName: 'Name',
+                                            name: 'name',
+                                            type: 'string',
+                                            default: '',
+                                            description: 'Provider slug to allow. Empty rows are skipped.',
+                                        },
+                                    ],
+                                },
+                            ],
+                            description: 'Restrict routing to these providers (maps to provider.only)',
+                        },
+                        {
+                            displayName: 'Deny Providers',
+                            name: 'deny',
+                            type: 'fixedCollection',
+                            placeholder: 'Add Denied Provider',
+                            default: {},
+                            typeOptions: {
+                                multipleValues: true,
+                            },
+                            options: [
+                                {
+                                    displayName: 'Values',
+                                    name: 'values',
+                                    values: [
+                                        {
+                                            displayName: 'Name',
+                                            name: 'name',
+                                            type: 'string',
+                                            default: '',
+                                            description: 'Provider slug to ignore. Empty rows are skipped.',
+                                        },
+                                    ],
+                                },
+                            ],
+                            description: 'Exclude these providers from routing (maps to provider.ignore)',
+                        },
+                        {
+                            displayName: 'Require Parameters Override',
+                            name: 'requireParameters',
+                            type: 'options',
+                            options: [
+                                { name: 'Default', value: '' },
+                                { name: 'False', value: 'false' },
+                                { name: 'True', value: 'true' },
+                            ],
+                            default: '',
+                            description: 'Override provider.require_parameters. Default leaves the field unset on the wire.',
+                        },
+                        {
+                            displayName: 'Sort',
+                            name: 'sort',
+                            type: 'options',
+                            options: [
+                                { name: 'Default', value: '' },
+                                { name: 'Latency', value: 'latency' },
+                                { name: 'Price', value: 'price' },
+                                { name: 'Throughput', value: 'throughput' },
+                            ],
+                            default: '',
+                            description: 'How OpenRouter should sort eligible providers. Default omits the field.',
                         },
                     ],
                 },
@@ -740,14 +749,15 @@ class OpenrouterLlm {
         };
     }
     async execute() {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e;
         const items = this.getInputData();
         const returnData = [];
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
             try {
                 const credentials = await this.getCredentials('openRouterApi');
                 const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
-                const modelVariant = this.getNodeParameter('modelVariant', itemIndex, '');
+                const modelOptions = this.getNodeParameter('modelOptions', itemIndex, {});
+                const modelVariant = (_a = modelOptions.modelVariant) !== null && _a !== void 0 ? _a : '';
                 const outputMode = this.getNodeParameter('outputMode', itemIndex, 'text');
                 const maxAttempts = outputMode === 'text'
                     ? 1
@@ -780,7 +790,7 @@ class OpenrouterLlm {
                         body,
                     }));
                     lastResponse = response;
-                    lastRawText = (_d = (_c = (_b = (_a = response.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) !== null && _d !== void 0 ? _d : '';
+                    lastRawText = (_e = (_d = (_c = (_b = response.choices) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.message) === null || _d === void 0 ? void 0 : _d.content) !== null && _e !== void 0 ? _e : '';
                     if (outputMode === 'text') {
                         structured = null;
                         break;
@@ -802,6 +812,16 @@ class OpenrouterLlm {
                         content: buildCorrectiveMessage(lastErrors),
                     });
                     attempt += 1;
+                }
+                const reasoningParams = this.getNodeParameter('reasoning', itemIndex, {});
+                if (reasoningParams.exclude === true && (lastResponse === null || lastResponse === void 0 ? void 0 : lastResponse.choices)) {
+                    for (const choice of lastResponse.choices) {
+                        const msg = choice.message;
+                        if (msg) {
+                            delete msg.reasoning;
+                            delete msg.reasoning_content;
+                        }
+                    }
                 }
                 returnData.push({
                     json: {
@@ -833,6 +853,7 @@ class OpenrouterLlm {
 }
 exports.OpenrouterLlm = OpenrouterLlm;
 function buildRequestBody(executeFunctions, itemIndex, attempt = 1, outputMode = 'text', compiledValidator) {
+    var _a, _b;
     const modelPayload = buildModelPayload(executeFunctions, itemIndex);
     const resolvedModel = resolveMetadataModel(modelPayload);
     const body = {
@@ -845,7 +866,7 @@ function buildRequestBody(executeFunctions, itemIndex, attempt = 1, outputMode =
     else if (outputMode === 'json_schema' && compiledValidator !== undefined) {
         body.response_format = {
             type: 'json_schema',
-            json_schema: { schema: compiledValidator.schema, strict: true },
+            json_schema: { name: 'response', schema: compiledValidator.schema, strict: true },
         };
     }
     const temperature = executeFunctions.getNodeParameter('temperature', itemIndex);
@@ -853,8 +874,9 @@ function buildRequestBody(executeFunctions, itemIndex, attempt = 1, outputMode =
     const generation = executeFunctions.getNodeParameter('generation', itemIndex, {});
     const advancedSampling = executeFunctions.getNodeParameter('advancedSampling', itemIndex, {});
     const reasoning = buildReasoning(executeFunctions, executeFunctions.getNodeParameter('reasoning', itemIndex, {}));
-    const responseHealing = executeFunctions.getNodeParameter('responseHealing', itemIndex, false);
-    const session = executeFunctions.getNodeParameter('session', itemIndex, {});
+    const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {});
+    const responseHealing = (_a = integrations.responseHealing) !== null && _a !== void 0 ? _a : false;
+    const sessionId = (_b = integrations.sessionId) !== null && _b !== void 0 ? _b : '';
     body.metadata = buildMetadata(executeFunctions, itemIndex, resolvedModel, attempt);
     if (!isUnset(temperature)) {
         body.temperature = temperature;
@@ -899,31 +921,32 @@ function buildRequestBody(executeFunctions, itemIndex, attempt = 1, outputMode =
     if (plugins.length > 0) {
         body.plugins = plugins;
     }
-    addOptionalText(executeFunctions, body, 'session_id', session.sessionId, 'Session ID');
+    addOptionalText(executeFunctions, body, 'session_id', sessionId, 'Session ID');
     return body;
 }
 function buildHeaders(executeFunctions, itemIndex) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const headers = {};
-    const langfuseTrace = executeFunctions.getNodeParameter('langfuseTrace', itemIndex, true);
-    const customHeaders = executeFunctions.getNodeParameter('headers', itemIndex, {});
+    const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {});
+    const langfuseTrace = (_a = integrations.langfuseTrace) !== null && _a !== void 0 ? _a : true;
+    const customHeaders = (_b = integrations.headers) !== null && _b !== void 0 ? _b : {};
     if (langfuseTrace) {
         headers['langfuse-trace-id'] = executeFunctions.getExecutionId();
     }
-    for (const header of (_a = customHeaders.values) !== null && _a !== void 0 ? _a : []) {
-        const name = (_b = header.name) !== null && _b !== void 0 ? _b : '';
+    for (const header of (_c = customHeaders.values) !== null && _c !== void 0 ? _c : []) {
+        const name = (_d = header.name) !== null && _d !== void 0 ? _d : '';
         if (name.trim() === '') {
             continue;
         }
         if (PROTECTED_HEADERS.includes(name.toLowerCase())) {
             throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `${name} is a protected header.`);
         }
-        headers[name] = (_c = header.value) !== null && _c !== void 0 ? _c : '';
+        headers[name] = (_e = header.value) !== null && _e !== void 0 ? _e : '';
     }
     return headers;
 }
 function buildMetadata(executeFunctions, itemIndex, model, attempt = 1) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f;
     const workflow = executeFunctions.getWorkflow();
     const defaultMetadata = {
         execution_id: executeFunctions.getExecutionId(),
@@ -935,9 +958,10 @@ function buildMetadata(executeFunctions, itemIndex, model, attempt = 1) {
         validation_attempt: attempt,
     };
     const metadata = { ...defaultMetadata };
-    const extraMetadata = executeFunctions.getNodeParameter('metadata', itemIndex, {});
-    for (const row of (_a = extraMetadata.values) !== null && _a !== void 0 ? _a : []) {
-        const key = (_c = (_b = row.key) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : '';
+    const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {});
+    const extraMetadata = (_a = integrations.metadata) !== null && _a !== void 0 ? _a : {};
+    for (const row of (_b = extraMetadata.values) !== null && _b !== void 0 ? _b : []) {
+        const key = (_d = (_c = row.key) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : '';
         if (key === '') {
             continue;
         }
@@ -946,14 +970,14 @@ function buildMetadata(executeFunctions, itemIndex, model, attempt = 1) {
         }
         if (row.valueMode === 'json') {
             try {
-                metadata[key] = JSON.parse((_d = row.value) !== null && _d !== void 0 ? _d : '');
+                metadata[key] = JSON.parse((_e = row.value) !== null && _e !== void 0 ? _e : '');
             }
             catch {
                 throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `${key} metadata value must be valid JSON.`);
             }
             continue;
         }
-        metadata[key] = (_e = row.value) !== null && _e !== void 0 ? _e : '';
+        metadata[key] = (_f = row.value) !== null && _f !== void 0 ? _f : '';
     }
     return metadata;
 }
@@ -979,7 +1003,8 @@ function buildModelPayload(executeFunctions, itemIndex) {
 function buildReasoning(executeFunctions, reasoning) {
     var _a, _b;
     const mode = (_a = reasoning.mode) !== null && _a !== void 0 ? _a : 'off';
-    if (mode === 'off') {
+    const exclude = reasoning.exclude === true;
+    if (mode === 'off' && !exclude) {
         return undefined;
     }
     const output = {};
@@ -989,7 +1014,7 @@ function buildReasoning(executeFunctions, reasoning) {
     if (mode === 'tokenBudget') {
         output.max_tokens = validatePositiveNumber(executeFunctions, reasoning.maxTokens, 'Reasoning Max Tokens');
     }
-    if (reasoning.exclude === true) {
+    if (exclude) {
         output.exclude = true;
     }
     return output;
@@ -1023,10 +1048,11 @@ function isUnset(value) {
     return value === undefined || value === null || value === '';
 }
 function resolvePrimaryModel(executeFunctions, itemIndex) {
-    var _a;
+    var _a, _b;
     const modelParameter = executeFunctions.getNodeParameter('model', itemIndex);
     const modelId = typeof modelParameter === 'string' ? modelParameter : ((_a = modelParameter.value) !== null && _a !== void 0 ? _a : '').toString();
-    const modelVariant = executeFunctions.getNodeParameter('modelVariant', itemIndex, '');
+    const modelOptions = executeFunctions.getNodeParameter('modelOptions', itemIndex, {});
+    const modelVariant = (_b = modelOptions.modelVariant) !== null && _b !== void 0 ? _b : '';
     if (modelId.trim() === '') {
         throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'Model ID must not be empty.');
     }
@@ -1039,9 +1065,10 @@ function resolvePrimaryModel(executeFunctions, itemIndex) {
     return `${stripSupportedVariant(modelId)}${modelVariant}`;
 }
 function resolveFallbackModels(executeFunctions, itemIndex) {
-    var _a;
-    const fallbackModels = executeFunctions.getNodeParameter('fallbackModels', itemIndex, {});
-    return ((_a = fallbackModels.values) !== null && _a !== void 0 ? _a : [])
+    var _a, _b;
+    const modelOptions = executeFunctions.getNodeParameter('modelOptions', itemIndex, {});
+    const fallbackModels = (_a = modelOptions.fallbackModels) !== null && _a !== void 0 ? _a : {};
+    return ((_b = fallbackModels.values) !== null && _b !== void 0 ? _b : [])
         .map((fallback) => { var _a, _b; return (_b = (_a = fallback.model) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : ''; })
         .filter((model) => model !== '');
 }
@@ -1127,20 +1154,21 @@ function validateNonEmptyText(executeFunctions, value, label) {
     }
     return value;
 }
-function collectProviderNames(executeFunctions, itemIndex, parameter) {
+function collectProviderNamesFromCollection(collection) {
     var _a;
-    const collection = executeFunctions.getNodeParameter(parameter, itemIndex, {});
-    return ((_a = collection.values) !== null && _a !== void 0 ? _a : [])
+    return ((_a = (collection !== null && collection !== void 0 ? collection : {}).values) !== null && _a !== void 0 ? _a : [])
         .map((row) => { var _a, _b; return (_b = (_a = row.name) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : ''; })
         .filter((name) => name !== '');
 }
 function buildProvider(executeFunctions, itemIndex, outputMode = 'text') {
+    var _a, _b, _c;
     const provider = {};
-    const allow = collectProviderNames(executeFunctions, itemIndex, 'providerAllow');
-    const deny = collectProviderNames(executeFunctions, itemIndex, 'providerDeny');
-    const sort = executeFunctions.getNodeParameter('providerSort', itemIndex, '');
-    const allowFallbacks = executeFunctions.getNodeParameter('providerAllowFallbacks', itemIndex, '');
-    const requireParameters = executeFunctions.getNodeParameter('providerRequireParameters', itemIndex, '');
+    const routing = executeFunctions.getNodeParameter('providerRouting', itemIndex, {});
+    const allow = collectProviderNamesFromCollection(routing.allow);
+    const deny = collectProviderNamesFromCollection(routing.deny);
+    const sort = (_a = routing.sort) !== null && _a !== void 0 ? _a : '';
+    const allowFallbacks = (_b = routing.allowFallbacks) !== null && _b !== void 0 ? _b : '';
+    const requireParameters = (_c = routing.requireParameters) !== null && _c !== void 0 ? _c : '';
     if (allow.length > 0) {
         provider.only = allow;
     }
@@ -1218,16 +1246,16 @@ function buildCorrectiveMessage(errors) {
     return `Your previous response failed validation. Errors:\n${top}\nReturn only valid JSON matching the original schema. Do not repeat the schema.`;
 }
 function buildWebPlugin(executeFunctions, itemIndex) {
-    const config = executeFunctions.getNodeParameter('webPlugin', itemIndex, {});
-    if (config.enabled !== true) {
+    const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {});
+    if (integrations.webEnabled !== true) {
         return undefined;
     }
     const plugin = { id: 'web' };
-    if (!isUnset(config.maxResults)) {
-        plugin.max_results = validatePositiveNumber(executeFunctions, config.maxResults, 'Web Search Max Results');
+    if (!isUnset(integrations.webMaxResults)) {
+        plugin.max_results = validatePositiveNumber(executeFunctions, integrations.webMaxResults, 'Web Search Max Results');
     }
-    if (typeof config.searchPrompt === 'string' && config.searchPrompt.trim() !== '') {
-        plugin.search_prompt = config.searchPrompt;
+    if (typeof integrations.webSearchPrompt === 'string' && integrations.webSearchPrompt.trim() !== '') {
+        plugin.search_prompt = integrations.webSearchPrompt;
     }
     return plugin;
 }
