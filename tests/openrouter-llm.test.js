@@ -391,8 +391,7 @@ test('Openrouter LLM strips empty optional controls from the request', async () 
 			topA: '',
 			transforms: [],
 		},
-		responseHealing: false,
-		session: { sessionId: '' },
+		integrations: { responseHealing: false, sessionId: '' },
 	});
 
 	await node.execute.call(context);
@@ -490,15 +489,17 @@ test('Openrouter LLM sends Langfuse trace headers and body metadata without cros
 			prompt: 'Hello',
 			temperature: 0.2,
 			maxTokens: 100,
-			langfuseTrace: true,
-			headers: {
-				values: [{ name: 'X-Customer-Trace', value: 'trace-{{$json.id}}' }],
-			},
-			metadata: {
-				values: [
-					{ key: 'tenant', valueMode: 'string', value: 'acme' },
-					{ key: 'payload', valueMode: 'json', value: '{"ok":true}' },
-				],
+			integrations: {
+				langfuseTrace: true,
+				headers: {
+					values: [{ name: 'X-Customer-Trace', value: 'trace-{{$json.id}}' }],
+				},
+				metadata: {
+					values: [
+						{ key: 'tenant', valueMode: 'string', value: 'acme' },
+						{ key: 'payload', valueMode: 'json', value: '{"ok":true}' },
+					],
+				},
 			},
 		},
 		{
@@ -538,7 +539,7 @@ test('Openrouter LLM can disable the Langfuse trace header', async () => {
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		langfuseTrace: false,
+		integrations: { langfuseTrace: false },
 	});
 
 	await node.execute.call(context);
@@ -559,7 +560,7 @@ test('Openrouter LLM rejects protected custom headers before making a request', 
 				prompt: 'Hello',
 				temperature: 0.2,
 				maxTokens: 100,
-				headers: { values: [{ name: headerName, value: 'bad' }] },
+				integrations: { headers: { values: [{ name: headerName, value: 'bad' }] } },
 			},
 			{ continueOnFail: true },
 		);
@@ -592,7 +593,7 @@ test('Openrouter LLM rejects invalid metadata rows before making a request', asy
 				prompt: 'Hello',
 				temperature: 0.2,
 				maxTokens: 100,
-				metadata,
+				integrations: { metadata },
 			},
 			{ continueOnFail: true },
 		);
@@ -647,11 +648,13 @@ test('Openrouter LLM maps allow and deny provider lists to provider.only and pro
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		providerAllow: {
-			values: [{ name: 'anthropic' }, { name: '' }, { name: 'openai' }],
-		},
-		providerDeny: {
-			values: [{ name: 'fireworks' }, { name: '   ' }],
+		providerRouting: {
+			allow: {
+				values: [{ name: 'anthropic' }, { name: '' }, { name: 'openai' }],
+			},
+			deny: {
+				values: [{ name: 'fireworks' }, { name: '   ' }],
+			},
 		},
 	});
 
@@ -671,9 +674,11 @@ test('Openrouter LLM maps provider sort, allow_fallbacks, and require_parameters
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		providerSort: 'price',
-		providerAllowFallbacks: 'false',
-		providerRequireParameters: 'true',
+		providerRouting: {
+			sort: 'price',
+			allowFallbacks: 'false',
+			requireParameters: 'true',
+		},
 	});
 
 	await node.execute.call(context);
@@ -693,9 +698,11 @@ test('Openrouter LLM omits provider three-state fields by default', async () => 
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		providerSort: '',
-		providerAllowFallbacks: '',
-		providerRequireParameters: '',
+		providerRouting: {
+			sort: '',
+			allowFallbacks: '',
+			requireParameters: '',
+		},
 	});
 
 	await node.execute.call(context);
@@ -709,11 +716,11 @@ test('Openrouter LLM rejects nitro variant combined with provider sort before ma
 	const { context, requests } = createExecutionContext(
 		{
 			model: 'openai/gpt-4o-mini',
-			modelVariant: ':nitro',
+			modelOptions: { modelVariant: ':nitro' },
 			prompt: 'Hello',
 			temperature: 0.2,
 			maxTokens: 100,
-			providerSort: 'throughput',
+			providerRouting: { sort: 'throughput' },
 		},
 		{ continueOnFail: true },
 	);
@@ -731,11 +738,11 @@ test('Openrouter LLM rejects floor variant combined with provider sort before ma
 	const { context, requests } = createExecutionContext(
 		{
 			model: 'openai/gpt-4o-mini',
-			modelVariant: ':floor',
+			modelOptions: { modelVariant: ':floor' },
 			prompt: 'Hello',
 			temperature: 0.2,
 			maxTokens: 100,
-			providerSort: 'price',
+			providerRouting: { sort: 'price' },
 		},
 		{ continueOnFail: true },
 	);
@@ -756,8 +763,10 @@ test('Openrouter LLM rejects providers appearing in both allow and deny lists ca
 			prompt: 'Hello',
 			temperature: 0.2,
 			maxTokens: 100,
-			providerAllow: { values: [{ name: '  Anthropic ' }] },
-			providerDeny: { values: [{ name: 'anthropic' }] },
+			providerRouting: {
+				allow: { values: [{ name: '  Anthropic ' }] },
+				deny: { values: [{ name: 'anthropic' }] },
+			},
 		},
 		{ continueOnFail: true },
 	);
@@ -1024,7 +1033,7 @@ test('Openrouter LLM keeps custom headers byte-identical across all retry attemp
 			maxTokens: 100,
 			outputMode: 'json_object',
 			maxValidationAttempts: 3,
-			headers: { values: [{ name: 'X-Trace', value: 'abc' }] },
+			integrations: { headers: { values: [{ name: 'X-Trace', value: 'abc' }] } },
 		},
 		{
 			responder: (_opts, attemptIndex) => ({
@@ -1091,7 +1100,7 @@ test('Openrouter LLM omits the plugins key entirely when the web search plugin i
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		webPlugin: { enabled: false },
+		integrations: { webEnabled: false },
 	});
 
 	await node.execute.call(context);
@@ -1107,7 +1116,7 @@ test('Openrouter LLM sends a bare web plugin when enabled with no optional field
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		webPlugin: { enabled: true },
+		integrations: { webEnabled: true },
 	});
 
 	await node.execute.call(context);
@@ -1123,7 +1132,7 @@ test('Openrouter LLM forwards web plugin max_results when set', async () => {
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		webPlugin: { enabled: true, maxResults: 5 },
+		integrations: { webEnabled: true, webMaxResults: 5 },
 	});
 
 	await node.execute.call(context);
@@ -1139,7 +1148,7 @@ test('Openrouter LLM forwards web plugin search_prompt when set to a non-empty s
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		webPlugin: { enabled: true, searchPrompt: 'Cite primary sources in your answer.' },
+		integrations: { webEnabled: true, webSearchPrompt: 'Cite primary sources in your answer.' },
 	});
 
 	await node.execute.call(context);
@@ -1155,11 +1164,11 @@ test('Openrouter LLM rejects the :online variant combined with the web search pl
 	const { context, requests } = createExecutionContext(
 		{
 			model: 'openai/gpt-4o-mini',
-			modelVariant: ':online',
+			modelOptions: { modelVariant: ':online' },
 			prompt: 'Hello',
 			temperature: 0.2,
 			maxTokens: 100,
-			webPlugin: { enabled: true },
+			integrations: { webEnabled: true },
 		},
 		{ continueOnFail: true },
 	);
@@ -1176,11 +1185,11 @@ test('Openrouter LLM allows nitro variant combined with the web search plugin', 
 	const node = new OpenrouterLlm();
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
-		modelVariant: ':nitro',
+		modelOptions: { modelVariant: ':nitro' },
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		webPlugin: { enabled: true },
+		integrations: { webEnabled: true },
 	});
 
 	await node.execute.call(context);
@@ -1195,11 +1204,11 @@ test('Openrouter LLM allows the :online variant when the web search plugin is di
 	const node = new OpenrouterLlm();
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
-		modelVariant: ':online',
+		modelOptions: { modelVariant: ':online' },
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		webPlugin: { enabled: false },
+		integrations: { webEnabled: false },
 	});
 
 	await node.execute.call(context);
@@ -1217,8 +1226,7 @@ test('Openrouter LLM combines response-healing and web plugins in a single plugi
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		responseHealing: true,
-		webPlugin: { enabled: true, maxResults: 3 },
+		integrations: { responseHealing: true, webEnabled: true, webMaxResults: 3 },
 	});
 
 	await node.execute.call(context);
@@ -1263,7 +1271,7 @@ test('Openrouter LLM honors explicit Require Parameters override over the struct
 			temperature: 0.2,
 			maxTokens: 100,
 			outputMode: 'json_object',
-			providerRequireParameters: 'false',
+			providerRouting: { requireParameters: 'false' },
 		},
 		{
 			responder: () => ({
@@ -1314,12 +1322,14 @@ test('Openrouter LLM allows exacto variant combined with allow and deny provider
 	const node = new OpenrouterLlm();
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
-		modelVariant: ':exacto',
+		modelOptions: { modelVariant: ':exacto' },
 		prompt: 'Hello',
 		temperature: 0.2,
 		maxTokens: 100,
-		providerAllow: { values: [{ name: 'anthropic' }] },
-		providerDeny: { values: [{ name: 'fireworks' }] },
+		providerRouting: {
+			allow: { values: [{ name: 'anthropic' }] },
+			deny: { values: [{ name: 'fireworks' }] },
+		},
 	});
 
 	await node.execute.call(context);
