@@ -73,8 +73,7 @@ test('Openrouter LLM posts one chat completion request per input item', async ()
 		promptMode: 'systemUser',
 		prompt: '={{$json.prompt}}',
 		systemMessage: 'Be concise',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 	});
 
 	const result = await node.execute.call(context);
@@ -113,8 +112,7 @@ test('Openrouter LLM supports single prompt mode', async () => {
 		model: 'openai/gpt-4o-mini',
 		promptMode: 'single',
 		singlePrompt: 'Tell me one useful fact',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 	});
 
 	await node.execute.call(context);
@@ -136,8 +134,7 @@ test('Openrouter LLM supports messages JSON mode from a JSON string', async () =
 			{ role: 'assistant', content: 'The node changed.' },
 			{ role: 'user', content: 'Summarize it.' },
 		]),
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 	});
 
 	await node.execute.call(context);
@@ -160,8 +157,7 @@ test('Openrouter LLM supports messages JSON mode from an array value', async () 
 			{ role: 'system', content: 'Answer tersely' },
 			{ role: 'user', content: 'What changed?' },
 		],
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 	});
 
 	await node.execute.call(context);
@@ -180,8 +176,7 @@ test('Openrouter LLM rejects invalid prompt messages before making a request', a
 			model: 'openai/gpt-4o-mini',
 			promptMode: 'messagesJson',
 			messagesJson: [{ role: 'tool', content: 'bad' }],
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 		},
 		{ continueOnFail: true },
 	);
@@ -201,8 +196,7 @@ test('Openrouter LLM rejects empty prompts and message content before making a r
 			model: 'openai/gpt-4o-mini',
 			prompt: '   ',
 			systemMessage: 'Be concise',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 		},
 		{ continueOnFail: true },
 	);
@@ -211,8 +205,7 @@ test('Openrouter LLM rejects empty prompts and message content before making a r
 			model: 'openai/gpt-4o-mini',
 			promptMode: 'messagesJson',
 			messagesJson: [],
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 		},
 		{ continueOnFail: true },
 	);
@@ -221,8 +214,7 @@ test('Openrouter LLM rejects empty prompts and message content before making a r
 			model: 'openai/gpt-4o-mini',
 			promptMode: 'messagesJson',
 			messagesJson: [{ role: 'user', content: '' }],
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 		},
 		{ continueOnFail: true },
 	);
@@ -246,8 +238,7 @@ test('Openrouter LLM appends selected primary model variants after normalizing s
 		model: 'anthropic/claude-3.5-sonnet:free',
 		modelOptions: { modelVariant: ':nitro' },
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 	});
 
 	await node.execute.call(context);
@@ -268,8 +259,7 @@ test('Openrouter LLM sends fallback chains with models and no model field', asyn
 			},
 		},
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 	});
 
 	await node.execute.call(context);
@@ -319,7 +309,7 @@ test('Openrouter LLM loads searchable text model options from OpenRouter', async
 	assert.equal(requests[0].method, 'GET');
 	assert.equal(requests[0].baseURL, 'https://openrouter.ai/api/v1');
 	assert.equal(requests[0].url, '/models');
-	assert.deepEqual(result.results, [{ name: 'GPT-4o Mini', value: 'openai/gpt-4o-mini' }]);
+	assert.deepEqual(result.results, [{ name: 'openai/gpt-4o-mini', value: 'openai/gpt-4o-mini' }]);
 });
 
 test('Openrouter LLM maps typed generation and advanced sampling controls', async () => {
@@ -328,9 +318,9 @@ test('Openrouter LLM maps typed generation and advanced sampling controls', asyn
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 250,
 		generation: {
+			temperature: 0.2,
+			maxTokens: 250,
 			topP: 0.9,
 			frequencyPenalty: 0.1,
 			presencePenalty: 0.2,
@@ -373,9 +363,9 @@ test('Openrouter LLM strips empty optional controls from the request', async () 
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: '',
 		generation: {
+			temperature: 0.2,
+			maxTokens: '',
 			topP: '',
 			frequencyPenalty: '',
 			presencePenalty: '',
@@ -423,19 +413,19 @@ test('Openrouter LLM maps reasoning modes without mixing effort and token budget
 	const effort = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
+		generation: { temperature: 0.2 },
 		reasoning: { mode: 'effort', effort: 'xhigh', maxTokens: 100, exclude: true },
 	});
 	const tokenBudget = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
+		generation: { temperature: 0.2 },
 		reasoning: { mode: 'tokenBudget', effort: 'low', maxTokens: 512, exclude: true },
 	});
 	const defaultEnabled = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
+		generation: { temperature: 0.2 },
 		reasoning: { mode: 'defaultEnabled', effort: 'low', maxTokens: 512, exclude: false },
 	});
 
@@ -454,7 +444,7 @@ test('Openrouter LLM validates numeric typed controls before making a request', 
 	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
 	const node = new OpenrouterLlm();
 	const invalidCases = [
-		[{ maxTokens: -1 }, /max tokens must be greater than 0/i],
+		[{ generation: { maxTokens: -1 } }, /max tokens must be greater than 0/i],
 		[{ reasoning: { mode: 'tokenBudget', maxTokens: 0 } }, /reasoning max tokens must be greater than 0/i],
 		[{ advancedSampling: { topK: 0 } }, /top k must be greater than 0/i],
 		[{ advancedSampling: { repetitionPenalty: 0 } }, /repetition penalty must be greater than 0/i],
@@ -467,7 +457,7 @@ test('Openrouter LLM validates numeric typed controls before making a request', 
 			{
 				model: 'openai/gpt-4o-mini',
 				prompt: 'Hello',
-				temperature: 0.2,
+				generation: { temperature: 0.2 },
 				...parameters,
 			},
 			{ continueOnFail: true },
@@ -487,8 +477,7 @@ test('Openrouter LLM sends Langfuse trace headers and body metadata without cros
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			integrations: {
 				langfuseTrace: true,
 				headers: {
@@ -537,8 +526,7 @@ test('Openrouter LLM can disable the Langfuse trace header', async () => {
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		integrations: { langfuseTrace: false },
 	});
 
@@ -558,8 +546,7 @@ test('Openrouter LLM rejects protected custom headers before making a request', 
 			{
 				model: 'openai/gpt-4o-mini',
 				prompt: 'Hello',
-				temperature: 0.2,
-				maxTokens: 100,
+				generation: { temperature: 0.2, maxTokens: 100 },
 				integrations: { headers: { values: [{ name: headerName, value: 'bad' }] } },
 			},
 			{ continueOnFail: true },
@@ -591,8 +578,7 @@ test('Openrouter LLM rejects invalid metadata rows before making a request', asy
 			{
 				model: 'openai/gpt-4o-mini',
 				prompt: 'Hello',
-				temperature: 0.2,
-				maxTokens: 100,
+				generation: { temperature: 0.2, maxTokens: 100 },
 				integrations: { metadata },
 			},
 			{ continueOnFail: true },
@@ -612,8 +598,7 @@ test('Openrouter LLM builds metadata per input item', async () => {
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 		},
 		{ inputItems: [{ json: { id: 1 } }, { json: { id: 2 } }] },
 	);
@@ -631,8 +616,7 @@ test('Openrouter LLM omits the provider key entirely when no provider routing is
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 	});
 
 	await node.execute.call(context);
@@ -646,8 +630,7 @@ test('Openrouter LLM maps allow and deny provider lists to provider.only and pro
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		providerRouting: {
 			allow: {
 				values: [{ name: 'anthropic' }, { name: '' }, { name: 'openai' }],
@@ -672,8 +655,7 @@ test('Openrouter LLM maps provider sort, allow_fallbacks, and require_parameters
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		providerRouting: {
 			sort: 'price',
 			allowFallbacks: 'false',
@@ -696,8 +678,7 @@ test('Openrouter LLM omits provider three-state fields by default', async () => 
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		providerRouting: {
 			sort: '',
 			allowFallbacks: '',
@@ -718,8 +699,7 @@ test('Openrouter LLM rejects nitro variant combined with provider sort before ma
 			model: 'openai/gpt-4o-mini',
 			modelOptions: { modelVariant: ':nitro' },
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			providerRouting: { sort: 'throughput' },
 		},
 		{ continueOnFail: true },
@@ -740,8 +720,7 @@ test('Openrouter LLM rejects floor variant combined with provider sort before ma
 			model: 'openai/gpt-4o-mini',
 			modelOptions: { modelVariant: ':floor' },
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			providerRouting: { sort: 'price' },
 		},
 		{ continueOnFail: true },
@@ -761,8 +740,7 @@ test('Openrouter LLM rejects providers appearing in both allow and deny lists ca
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			providerRouting: {
 				allow: { values: [{ name: '  Anthropic ' }] },
 				deny: { values: [{ name: 'anthropic' }] },
@@ -784,8 +762,7 @@ test('Openrouter LLM in json_object mode sends response_format and returns parse
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_object',
 		},
 		{
@@ -811,8 +788,7 @@ test('Openrouter LLM in json_object mode rejects array and primitive responses a
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_object',
 			maxValidationAttempts: 1,
 		},
@@ -844,8 +820,7 @@ test('Openrouter LLM in json_schema mode rejects unparseable and uncompilable sc
 			{
 				model: 'openai/gpt-4o-mini',
 				prompt: 'Hello',
-				temperature: 0.2,
-				maxTokens: 100,
+				generation: { temperature: 0.2, maxTokens: 100 },
 				outputMode: 'json_schema',
 				jsonSchema: schema,
 			},
@@ -871,8 +846,7 @@ test('Openrouter LLM in json_schema mode sends strict json_schema response_forma
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_schema',
 			jsonSchema: JSON.stringify(schema),
 		},
@@ -908,8 +882,7 @@ test('Openrouter LLM retries once with a corrective system message and succeeds 
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_object',
 			maxValidationAttempts: 3,
 		},
@@ -942,8 +915,7 @@ test('Openrouter LLM surfaces a final error after exhausting all validation atte
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_object',
 			maxValidationAttempts: 3,
 		},
@@ -971,8 +943,7 @@ test('Openrouter LLM does not retry on HTTP errors during structured mode', asyn
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_object',
 			maxValidationAttempts: 3,
 		},
@@ -998,8 +969,7 @@ test('Openrouter LLM resets validation_attempt to 1 across input items even afte
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_object',
 			maxValidationAttempts: 3,
 		},
@@ -1029,8 +999,7 @@ test('Openrouter LLM keeps custom headers byte-identical across all retry attemp
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_object',
 			maxValidationAttempts: 3,
 			integrations: { headers: { values: [{ name: 'X-Trace', value: 'abc' }] } },
@@ -1071,8 +1040,7 @@ test('Openrouter LLM caps the corrective system message to the first five valida
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_schema',
 			jsonSchema: JSON.stringify(schema),
 			maxValidationAttempts: 3,
@@ -1098,8 +1066,7 @@ test('Openrouter LLM omits the plugins key entirely when the web search plugin i
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		integrations: { webEnabled: false },
 	});
 
@@ -1114,8 +1081,7 @@ test('Openrouter LLM sends a bare web plugin when enabled with no optional field
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		integrations: { webEnabled: true },
 	});
 
@@ -1130,8 +1096,7 @@ test('Openrouter LLM forwards web plugin max_results when set', async () => {
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		integrations: { webEnabled: true, webMaxResults: 5 },
 	});
 
@@ -1146,8 +1111,7 @@ test('Openrouter LLM forwards web plugin search_prompt when set to a non-empty s
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		integrations: { webEnabled: true, webSearchPrompt: 'Cite primary sources in your answer.' },
 	});
 
@@ -1166,8 +1130,7 @@ test('Openrouter LLM rejects the :online variant combined with the web search pl
 			model: 'openai/gpt-4o-mini',
 			modelOptions: { modelVariant: ':online' },
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			integrations: { webEnabled: true },
 		},
 		{ continueOnFail: true },
@@ -1187,8 +1150,7 @@ test('Openrouter LLM allows nitro variant combined with the web search plugin', 
 		model: 'openai/gpt-4o-mini',
 		modelOptions: { modelVariant: ':nitro' },
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		integrations: { webEnabled: true },
 	});
 
@@ -1206,8 +1168,7 @@ test('Openrouter LLM allows the :online variant when the web search plugin is di
 		model: 'openai/gpt-4o-mini',
 		modelOptions: { modelVariant: ':online' },
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		integrations: { webEnabled: false },
 	});
 
@@ -1224,8 +1185,7 @@ test('Openrouter LLM combines response-healing and web plugins in a single plugi
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		integrations: { responseHealing: true, webEnabled: true, webMaxResults: 3 },
 	});
 
@@ -1244,8 +1204,7 @@ test('Openrouter LLM defaults provider.require_parameters to true in structured 
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_object',
 		},
 		{
@@ -1268,8 +1227,7 @@ test('Openrouter LLM honors explicit Require Parameters override over the struct
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
-			maxTokens: 100,
+			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_object',
 			providerRouting: { requireParameters: 'false' },
 		},
@@ -1292,8 +1250,7 @@ test('Openrouter LLM in text mode does not auto-set provider.require_parameters'
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 	});
 
 	await node.execute.call(context);
@@ -1307,8 +1264,7 @@ test('Openrouter LLM in text output mode omits response_format and returns struc
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 	});
 
 	const result = await node.execute.call(context);
@@ -1324,8 +1280,7 @@ test('Openrouter LLM allows exacto variant combined with allow and deny provider
 		model: 'openai/gpt-4o-mini',
 		modelOptions: { modelVariant: ':exacto' },
 		prompt: 'Hello',
-		temperature: 0.2,
-		maxTokens: 100,
+		generation: { temperature: 0.2, maxTokens: 100 },
 		providerRouting: {
 			allow: { values: [{ name: 'anthropic' }] },
 			deny: { values: [{ name: 'fireworks' }] },
@@ -1348,7 +1303,7 @@ test('Exclude reasoning with mode off still sends reasoning.exclude to the API',
 	const { context, requests } = createExecutionContext({
 		model: 'openai/gpt-4o-mini',
 		prompt: 'Hello',
-		temperature: 0.2,
+		generation: { temperature: 0.2 },
 		reasoning: { mode: 'off', exclude: true },
 	});
 
@@ -1364,7 +1319,7 @@ test('Exclude reasoning strips reasoning fields from response output', async () 
 		{
 			model: 'openai/gpt-4o-mini',
 			prompt: 'Hello',
-			temperature: 0.2,
+			generation: { temperature: 0.2 },
 			reasoning: { mode: 'effort', effort: 'medium', exclude: true },
 		},
 		{

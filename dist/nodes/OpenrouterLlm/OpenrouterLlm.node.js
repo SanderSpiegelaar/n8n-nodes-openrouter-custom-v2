@@ -86,12 +86,15 @@ class OpenrouterLlm {
                                     name: 'values',
                                     values: [
                                         {
-                                            displayName: 'Model ID',
+                                            displayName: 'Model Name or ID',
                                             name: 'model',
-                                            type: 'string',
+                                            type: 'options',
+                                            typeOptions: {
+                                                loadOptionsMethod: 'getOpenRouterModelOptions',
+                                            },
                                             default: '',
                                             required: true,
-                                            description: 'Fallback model or preset ID to pass to OpenRouter exactly as entered',
+                                            description: 'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
                                         },
                                     ],
                                 },
@@ -241,28 +244,6 @@ class OpenrouterLlm {
                     description: 'Array of chat messages with role and content. Roles can be system, user, or assistant.',
                 },
                 {
-                    displayName: 'Temperature',
-                    name: 'temperature',
-                    type: 'number',
-                    typeOptions: {
-                        minValue: 0,
-                        maxValue: 2,
-                        numberPrecision: 2,
-                    },
-                    default: 0.7,
-                    description: 'Sampling temperature to send to OpenRouter',
-                },
-                {
-                    displayName: 'Max Tokens',
-                    name: 'maxTokens',
-                    type: 'number',
-                    typeOptions: {
-                        minValue: 1,
-                    },
-                    default: 1024,
-                    description: 'Maximum number of tokens to generate',
-                },
-                {
                     displayName: 'Generation',
                     name: 'generation',
                     type: 'collection',
@@ -275,6 +256,16 @@ class OpenrouterLlm {
                             type: 'number',
                             default: '',
                             description: 'Penalty for repeated token frequency',
+                        },
+                        {
+                            displayName: 'Max Tokens',
+                            name: 'maxTokens',
+                            type: 'number',
+                            typeOptions: {
+                                minValue: 1,
+                            },
+                            default: '',
+                            description: 'Maximum number of tokens to generate. Omitted when empty.',
                         },
                         {
                             displayName: 'Presence Penalty',
@@ -303,6 +294,18 @@ class OpenrouterLlm {
                             type: 'string',
                             default: '',
                             description: 'Stop sequence to send to OpenRouter',
+                        },
+                        {
+                            displayName: 'Temperature',
+                            name: 'temperature',
+                            type: 'number',
+                            typeOptions: {
+                                minValue: 0,
+                                maxValue: 2,
+                                numberPrecision: 2,
+                            },
+                            default: '',
+                            description: 'Sampling temperature to send to OpenRouter. Omitted when empty.',
                         },
                         {
                             displayName: 'Top P',
@@ -736,14 +739,33 @@ class OpenrouterLlm {
                         return (model.id.toLowerCase().includes(normalizedFilter) ||
                             ((_a = model.name) !== null && _a !== void 0 ? _a : '').toLowerCase().includes(normalizedFilter));
                     })
-                        .map((model) => {
-                        var _a;
-                        return ({
-                            name: (_a = model.name) !== null && _a !== void 0 ? _a : model.id,
-                            value: model.id,
-                        });
-                    });
+                        .map((model) => ({
+                        name: model.id,
+                        value: model.id,
+                    }))
+                        .sort((a, b) => a.value.localeCompare(b.value));
                     return { results };
+                },
+            },
+            loadOptions: {
+                async getOpenRouterModelOptions() {
+                    var _a;
+                    const credentials = await this.getCredentials('openRouterApi');
+                    const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
+                    const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'openRouterApi', {
+                        method: 'GET',
+                        baseURL: baseUrl,
+                        url: '/models',
+                        json: true,
+                    }));
+                    return ((_a = response.data) !== null && _a !== void 0 ? _a : [])
+                        .filter((model) => isTextModel(model))
+                        .filter((model) => model.id !== 'openrouter/auto')
+                        .map((model) => ({
+                        name: model.id,
+                        value: model.id,
+                    }))
+                        .sort((a, b) => a.value.localeCompare(b.value));
                 },
             },
         };
@@ -869,9 +891,9 @@ function buildRequestBody(executeFunctions, itemIndex, attempt = 1, outputMode =
             json_schema: { name: 'response', schema: compiledValidator.schema, strict: true },
         };
     }
-    const temperature = executeFunctions.getNodeParameter('temperature', itemIndex);
-    const maxTokens = executeFunctions.getNodeParameter('maxTokens', itemIndex);
     const generation = executeFunctions.getNodeParameter('generation', itemIndex, {});
+    const temperature = generation.temperature;
+    const maxTokens = generation.maxTokens;
     const advancedSampling = executeFunctions.getNodeParameter('advancedSampling', itemIndex, {});
     const reasoning = buildReasoning(executeFunctions, executeFunctions.getNodeParameter('reasoning', itemIndex, {}));
     const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {});
@@ -1239,10 +1261,13 @@ function validateStructuredResponse(mode, rawText, compiledValidator) {
 function formatAjvError(error) {
     var _a, _b, _c;
     const path = (_a = error.instancePath) !== null && _a !== void 0 ? _a : '';
-    return path === '' ? (_b = error.message) !== null && _b !== void 0 ? _b : 'invalid' : `${path} ${(_c = error.message) !== null && _c !== void 0 ? _c : 'invalid'}`;
+    return path === '' ? ((_b = error.message) !== null && _b !== void 0 ? _b : 'invalid') : `${path} ${(_c = error.message) !== null && _c !== void 0 ? _c : 'invalid'}`;
 }
 function buildCorrectiveMessage(errors) {
-    const top = errors.slice(0, 5).map((line) => `- ${line}`).join('\n');
+    const top = errors
+        .slice(0, 5)
+        .map((line) => `- ${line}`)
+        .join('\n');
     return `Your previous response failed validation. Errors:\n${top}\nReturn only valid JSON matching the original schema. Do not repeat the schema.`;
 }
 function buildWebPlugin(executeFunctions, itemIndex) {
@@ -1254,7 +1279,8 @@ function buildWebPlugin(executeFunctions, itemIndex) {
     if (!isUnset(integrations.webMaxResults)) {
         plugin.max_results = validatePositiveNumber(executeFunctions, integrations.webMaxResults, 'Web Search Max Results');
     }
-    if (typeof integrations.webSearchPrompt === 'string' && integrations.webSearchPrompt.trim() !== '') {
+    if (typeof integrations.webSearchPrompt === 'string' &&
+        integrations.webSearchPrompt.trim() !== '') {
         plugin.search_prompt = integrations.webSearchPrompt;
     }
     return plugin;

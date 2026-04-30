@@ -4,6 +4,7 @@ import type {
 	ILoadOptionsFunctions,
 	INodeListSearchResult,
 	INodeExecutionData,
+	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
@@ -103,17 +104,21 @@ export class OpenrouterLlm implements INodeType {
 								name: 'values',
 								values: [
 									{
-										displayName: 'Model ID',
+										displayName: 'Model Name or ID',
 										name: 'model',
-										type: 'string',
+										type: 'options',
+										typeOptions: {
+											loadOptionsMethod: 'getOpenRouterModelOptions',
+										},
 										default: '',
 										required: true,
-										description: 'Fallback model or preset ID to pass to OpenRouter exactly as entered',
+										description: 'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
 									},
 								],
 							},
 						],
-						description: 'Fallback models to send in OpenRouter models order after the primary model',
+						description:
+							'Fallback models to send in OpenRouter models order after the primary model',
 					},
 					{
 						displayName: 'Model Variant',
@@ -124,7 +129,8 @@ export class OpenrouterLlm implements INodeType {
 							{
 								name: 'Exacto',
 								value: ':exacto',
-								description: 'Prefer OpenRouter-curated providers for stronger tool-calling quality',
+								description:
+									'Prefer OpenRouter-curated providers for stronger tool-calling quality',
 								action: 'Use Exacto routing',
 							},
 							{
@@ -259,28 +265,6 @@ export class OpenrouterLlm implements INodeType {
 					'Array of chat messages with role and content. Roles can be system, user, or assistant.',
 			},
 			{
-				displayName: 'Temperature',
-				name: 'temperature',
-				type: 'number',
-				typeOptions: {
-					minValue: 0,
-					maxValue: 2,
-					numberPrecision: 2,
-				},
-				default: 0.7,
-				description: 'Sampling temperature to send to OpenRouter',
-			},
-			{
-				displayName: 'Max Tokens',
-				name: 'maxTokens',
-				type: 'number',
-				typeOptions: {
-					minValue: 1,
-				},
-				default: 1024,
-				description: 'Maximum number of tokens to generate',
-			},
-			{
 				displayName: 'Generation',
 				name: 'generation',
 				type: 'collection',
@@ -293,6 +277,16 @@ export class OpenrouterLlm implements INodeType {
 						type: 'number',
 						default: '',
 						description: 'Penalty for repeated token frequency',
+					},
+					{
+						displayName: 'Max Tokens',
+						name: 'maxTokens',
+						type: 'number',
+						typeOptions: {
+							minValue: 1,
+						},
+						default: '',
+						description: 'Maximum number of tokens to generate. Omitted when empty.',
 					},
 					{
 						displayName: 'Presence Penalty',
@@ -321,6 +315,18 @@ export class OpenrouterLlm implements INodeType {
 						type: 'string',
 						default: '',
 						description: 'Stop sequence to send to OpenRouter',
+					},
+					{
+						displayName: 'Temperature',
+						name: 'temperature',
+						type: 'number',
+						typeOptions: {
+							minValue: 0,
+							maxValue: 2,
+							numberPrecision: 2,
+						},
+						default: '',
+						description: 'Sampling temperature to send to OpenRouter. Omitted when empty.',
 					},
 					{
 						displayName: 'Top P',
@@ -469,14 +475,16 @@ export class OpenrouterLlm implements INodeType {
 								],
 							},
 						],
-						description: 'Custom request headers. Authorization and OpenRouter identity headers are protected.',
+						description:
+							'Custom request headers. Authorization and OpenRouter identity headers are protected.',
 					},
 					{
 						displayName: 'Langfuse Trace',
 						name: 'langfuseTrace',
 						type: 'boolean',
 						default: true,
-						description: 'Whether to add the Langfuse trace header using the n8n execution identifier',
+						description:
+							'Whether to add the Langfuse trace header using the n8n execution identifier',
 					},
 					{
 						displayName: 'Metadata',
@@ -647,7 +655,8 @@ export class OpenrouterLlm implements INodeType {
 							{ name: 'True', value: 'true' },
 						],
 						default: '',
-						description: 'Override provider.allow_fallbacks. Default leaves the field unset on the wire.',
+						description:
+							'Override provider.allow_fallbacks. Default leaves the field unset on the wire.',
 					},
 					{
 						displayName: 'Allow Providers',
@@ -711,7 +720,8 @@ export class OpenrouterLlm implements INodeType {
 							{ name: 'True', value: 'true' },
 						],
 						default: '',
-						description: 'Override provider.require_parameters. Default leaves the field unset on the wire.',
+						description:
+							'Override provider.require_parameters. Default leaves the field unset on the wire.',
 					},
 					{
 						displayName: 'Sort',
@@ -765,11 +775,39 @@ export class OpenrouterLlm implements INodeType {
 						);
 					})
 					.map((model) => ({
-						name: model.name ?? model.id,
+						name: model.id,
 						value: model.id,
-					}));
+					}))
+					.sort((a, b) => a.value.localeCompare(b.value));
 
 				return { results };
+			},
+		},
+		loadOptions: {
+			async getOpenRouterModelOptions(
+				this: ILoadOptionsFunctions,
+			): Promise<INodePropertyOptions[]> {
+				const credentials = await this.getCredentials('openRouterApi');
+				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
+				const response = (await this.helpers.httpRequestWithAuthentication.call(
+					this,
+					'openRouterApi',
+					{
+						method: 'GET',
+						baseURL: baseUrl,
+						url: '/models',
+						json: true,
+					},
+				)) as { data?: OpenRouterModel[] };
+
+				return (response.data ?? [])
+					.filter((model) => isTextModel(model))
+					.filter((model) => model.id !== 'openrouter/auto')
+					.map((model) => ({
+						name: model.id,
+						value: model.id,
+					}))
+					.sort((a, b) => a.value.localeCompare(b.value));
 			},
 		},
 	};
@@ -789,7 +827,8 @@ export class OpenrouterLlm implements INodeType {
 					outputMode === 'text'
 						? 1
 						: (this.getNodeParameter('maxValidationAttempts', itemIndex, 3) as number);
-				const compiledValidator = outputMode === 'json_schema' ? compileSchema(this, itemIndex) : undefined;
+				const compiledValidator =
+					outputMode === 'json_schema' ? compileSchema(this, itemIndex) : undefined;
 				const provider = buildProvider(this, itemIndex, outputMode);
 				const webPluginEnabled = buildWebPlugin(this, itemIndex) !== undefined;
 				validateRouting(this, modelVariant, provider, webPluginEnabled);
@@ -942,9 +981,9 @@ function buildRequestBody(
 			json_schema: { name: 'response', schema: compiledValidator.schema, strict: true },
 		};
 	}
-	const temperature = executeFunctions.getNodeParameter('temperature', itemIndex) as number | string;
-	const maxTokens = executeFunctions.getNodeParameter('maxTokens', itemIndex) as number | string;
 	const generation = executeFunctions.getNodeParameter('generation', itemIndex, {}) as IDataObject;
+	const temperature = generation.temperature as number | string | undefined;
+	const maxTokens = generation.maxTokens as number | string | undefined;
 	const advancedSampling = executeFunctions.getNodeParameter(
 		'advancedSampling',
 		itemIndex,
@@ -954,7 +993,11 @@ function buildRequestBody(
 		executeFunctions,
 		executeFunctions.getNodeParameter('reasoning', itemIndex, {}) as IDataObject,
 	);
-	const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {}) as IDataObject;
+	const integrations = executeFunctions.getNodeParameter(
+		'integrations',
+		itemIndex,
+		{},
+	) as IDataObject;
 	const responseHealing = (integrations.responseHealing as boolean | undefined) ?? false;
 	const sessionId = (integrations.sessionId as string | undefined) ?? '';
 	body.metadata = buildMetadata(executeFunctions, itemIndex, resolvedModel, attempt);
@@ -970,7 +1013,13 @@ function buildRequestBody(
 	addOptionalNumber(body, 'top_p', generation.topP);
 	addOptionalNumber(body, 'frequency_penalty', generation.frequencyPenalty);
 	addOptionalNumber(body, 'presence_penalty', generation.presencePenalty);
-	addOptionalText(executeFunctions, body, 'prompt_cache_key', generation.promptCacheKey, 'Prompt Cache Key');
+	addOptionalText(
+		executeFunctions,
+		body,
+		'prompt_cache_key',
+		generation.promptCacheKey,
+		'Prompt Cache Key',
+	);
 	addOptionalNumber(body, 'seed', generation.seed);
 
 	if (!isUnset(generation.stop)) {
@@ -1028,11 +1077,18 @@ function buildRequestBody(
 
 function buildHeaders(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
 	const headers: IDataObject = {};
-	const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {}) as IDataObject;
+	const integrations = executeFunctions.getNodeParameter(
+		'integrations',
+		itemIndex,
+		{},
+	) as IDataObject;
 	const langfuseTrace = (integrations.langfuseTrace as boolean | undefined) ?? true;
-	const customHeaders = (integrations.headers as {
-		values?: Array<{ name?: string; value?: string }>;
-	} | undefined) ?? {};
+	const customHeaders =
+		(integrations.headers as
+			| {
+					values?: Array<{ name?: string; value?: string }>;
+			  }
+			| undefined) ?? {};
 
 	if (langfuseTrace) {
 		headers['langfuse-trace-id'] = executeFunctions.getExecutionId();
@@ -1072,10 +1128,17 @@ function buildMetadata(
 		validation_attempt: attempt,
 	};
 	const metadata = { ...defaultMetadata };
-	const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {}) as IDataObject;
-	const extraMetadata = (integrations.metadata as {
-		values?: Array<{ key?: string; valueMode?: string; value?: string }>;
-	} | undefined) ?? {};
+	const integrations = executeFunctions.getNodeParameter(
+		'integrations',
+		itemIndex,
+		{},
+	) as IDataObject;
+	const extraMetadata =
+		(integrations.metadata as
+			| {
+					values?: Array<{ key?: string; valueMode?: string; value?: string }>;
+			  }
+			| undefined) ?? {};
 
 	for (const row of extraMetadata.values ?? []) {
 		const key = row.key?.trim() ?? '';
@@ -1218,7 +1281,11 @@ function resolvePrimaryModel(executeFunctions: IExecuteFunctions, itemIndex: num
 	const modelParameter = executeFunctions.getNodeParameter('model', itemIndex) as ModelLocatorValue;
 	const modelId =
 		typeof modelParameter === 'string' ? modelParameter : (modelParameter.value ?? '').toString();
-	const modelOptions = executeFunctions.getNodeParameter('modelOptions', itemIndex, {}) as IDataObject;
+	const modelOptions = executeFunctions.getNodeParameter(
+		'modelOptions',
+		itemIndex,
+		{},
+	) as IDataObject;
 	const modelVariant = (modelOptions.modelVariant as string | undefined) ?? '';
 
 	if (modelId.trim() === '') {
@@ -1229,7 +1296,9 @@ function resolvePrimaryModel(executeFunctions: IExecuteFunctions, itemIndex: num
 		return modelId;
 	}
 
-	if (!SUPPORTED_MODEL_VARIANTS.includes(modelVariant as (typeof SUPPORTED_MODEL_VARIANTS)[number])) {
+	if (
+		!SUPPORTED_MODEL_VARIANTS.includes(modelVariant as (typeof SUPPORTED_MODEL_VARIANTS)[number])
+	) {
 		throw new NodeOperationError(executeFunctions.getNode(), 'Unsupported model variant selected.');
 	}
 
@@ -1237,10 +1306,17 @@ function resolvePrimaryModel(executeFunctions: IExecuteFunctions, itemIndex: num
 }
 
 function resolveFallbackModels(executeFunctions: IExecuteFunctions, itemIndex: number): string[] {
-	const modelOptions = executeFunctions.getNodeParameter('modelOptions', itemIndex, {}) as IDataObject;
-	const fallbackModels = (modelOptions.fallbackModels as {
-		values?: Array<{ model?: string }>;
-	} | undefined) ?? {};
+	const modelOptions = executeFunctions.getNodeParameter(
+		'modelOptions',
+		itemIndex,
+		{},
+	) as IDataObject;
+	const fallbackModels =
+		(modelOptions.fallbackModels as
+			| {
+					values?: Array<{ model?: string }>;
+			  }
+			| undefined) ?? {};
 
 	return (fallbackModels.values ?? [])
 		.map((fallback) => fallback.model?.trim() ?? '')
@@ -1264,7 +1340,11 @@ function isTextModel(model: OpenRouterModel): boolean {
 }
 
 function buildMessages(executeFunctions: IExecuteFunctions, itemIndex: number): ChatMessage[] {
-	const promptMode = executeFunctions.getNodeParameter('promptMode', itemIndex, 'systemUser') as string;
+	const promptMode = executeFunctions.getNodeParameter(
+		'promptMode',
+		itemIndex,
+		'systemUser',
+	) as string;
 
 	if (promptMode === 'single') {
 		const singlePrompt = executeFunctions.getNodeParameter('singlePrompt', itemIndex) as string;
@@ -1314,7 +1394,10 @@ function validateMessagesJson(executeFunctions: IExecuteFunctions, value: unknow
 	}
 
 	if (!Array.isArray(parsedValue)) {
-		throw new NodeOperationError(executeFunctions.getNode(), 'Messages JSON must resolve to an array.');
+		throw new NodeOperationError(
+			executeFunctions.getNode(),
+			'Messages JSON must resolve to an array.',
+		);
 	}
 
 	if (parsedValue.length === 0) {
@@ -1335,7 +1418,10 @@ function validateMessage(
 	const messageNumber = index + 1;
 
 	if (message === null || typeof message !== 'object' || Array.isArray(message)) {
-		throw new NodeOperationError(executeFunctions.getNode(), `Message ${messageNumber} must be an object.`);
+		throw new NodeOperationError(
+			executeFunctions.getNode(),
+			`Message ${messageNumber} must be an object.`,
+		);
 	}
 
 	const candidate = message as IDataObject;
@@ -1387,7 +1473,11 @@ function buildProvider(
 	outputMode: OutputMode = 'text',
 ): IDataObject | undefined {
 	const provider: IDataObject = {};
-	const routing = executeFunctions.getNodeParameter('providerRouting', itemIndex, {}) as IDataObject;
+	const routing = executeFunctions.getNodeParameter(
+		'providerRouting',
+		itemIndex,
+		{},
+	) as IDataObject;
 	const allow = collectProviderNamesFromCollection(
 		routing.allow as { values?: Array<{ name?: string }> } | undefined,
 	);
@@ -1431,10 +1521,7 @@ const ajvInstance = (() => {
 	return ajv;
 })();
 
-function compileSchema(
-	executeFunctions: IExecuteFunctions,
-	itemIndex: number,
-): ValidateFunction {
+function compileSchema(executeFunctions: IExecuteFunctions, itemIndex: number): ValidateFunction {
 	const raw = executeFunctions.getNodeParameter('jsonSchema', itemIndex) as unknown;
 	let parsed: unknown = raw;
 
@@ -1459,9 +1546,7 @@ function compileSchema(
 	}
 }
 
-type ValidationResult =
-	| { ok: true; value: unknown }
-	| { ok: false; errors: string[] };
+type ValidationResult = { ok: true; value: unknown } | { ok: false; errors: string[] };
 
 function validateStructuredResponse(
 	mode: OutputMode,
@@ -1496,11 +1581,14 @@ function validateStructuredResponse(
 
 function formatAjvError(error: ErrorObject): string {
 	const path = error.instancePath ?? '';
-	return path === '' ? error.message ?? 'invalid' : `${path} ${error.message ?? 'invalid'}`;
+	return path === '' ? (error.message ?? 'invalid') : `${path} ${error.message ?? 'invalid'}`;
 }
 
 function buildCorrectiveMessage(errors: string[]): string {
-	const top = errors.slice(0, 5).map((line) => `- ${line}`).join('\n');
+	const top = errors
+		.slice(0, 5)
+		.map((line) => `- ${line}`)
+		.join('\n');
 	return `Your previous response failed validation. Errors:\n${top}\nReturn only valid JSON matching the original schema. Do not repeat the schema.`;
 }
 
@@ -1508,7 +1596,11 @@ function buildWebPlugin(
 	executeFunctions: IExecuteFunctions,
 	itemIndex: number,
 ): IDataObject | undefined {
-	const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {}) as IDataObject;
+	const integrations = executeFunctions.getNodeParameter(
+		'integrations',
+		itemIndex,
+		{},
+	) as IDataObject;
 
 	if (integrations.webEnabled !== true) {
 		return undefined;
@@ -1517,10 +1609,17 @@ function buildWebPlugin(
 	const plugin: IDataObject = { id: 'web' };
 
 	if (!isUnset(integrations.webMaxResults)) {
-		plugin.max_results = validatePositiveNumber(executeFunctions, integrations.webMaxResults, 'Web Search Max Results');
+		plugin.max_results = validatePositiveNumber(
+			executeFunctions,
+			integrations.webMaxResults,
+			'Web Search Max Results',
+		);
 	}
 
-	if (typeof integrations.webSearchPrompt === 'string' && (integrations.webSearchPrompt as string).trim() !== '') {
+	if (
+		typeof integrations.webSearchPrompt === 'string' &&
+		(integrations.webSearchPrompt as string).trim() !== ''
+	) {
 		plugin.search_prompt = integrations.webSearchPrompt;
 	}
 
