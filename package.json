@@ -1,58 +1,58 @@
 {
-  "name": "n8n-nodes-openrouter-visymo-v2",
-  "version": "1.0.0",
-  "description": "n8n community node for sending chat completion requests through OpenRouter.",
-  "license": "MIT",
-  "homepage": "",
-  "keywords": [
-    "n8n-community-node-package",
-    "openrouter",
-    "llm",
-    "ai"
-  ],
-  "author": {
-    "name": "Sander Spiegelaar",
-    "email": "sanderspiegelaar@gmail.com"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/sanderspiegelaar/n8n-nodes-openrouter-visymo-v2.git"
-  },
-  "scripts": {
-    "build": "n8n-node build",
-    "build:watch": "tsc --watch",
-    "dev": "n8n-node dev",
-    "lint": "n8n-node lint",
-    "lint:fix": "n8n-node lint --fix",
-    "test": "npm run build && node --test tests/*.test.js",
-    "release": "n8n-node release",
-    "prepublishOnly": "n8n-node prerelease"
-  },
-  "files": [
-    "dist"
-  ],
-  "n8n": {
-    "n8nNodesApiVersion": 1,
-    "strict": false,
-    "credentials": [
-      "dist/credentials/OpenRouterApi.credentials.js"
-    ],
-    "nodes": [
-      "dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js"
-    ]
-  },
-  "devDependencies": {
-    "@n8n/node-cli": "*",
-    "eslint": "9.32.0",
-    "prettier": "3.6.2",
-    "release-it": "^19.0.4",
-    "typescript": "5.9.2"
-  },
-  "peerDependencies": {
-    "n8n-workflow": "*"
-  },
-  "dependencies": {
-    "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1"
-  }
+	"name": "n8n-nodes-openrouter-visymo-v2",
+	"version": "0.1.0",
+	"description": "n8n community node for sending chat completion requests through OpenRouter.",
+	"license": "MIT",
+	"homepage": "",
+	"keywords": [
+		"n8n-community-node-package",
+		"openrouter",
+		"llm",
+		"ai"
+	],
+	"author": {
+		"name": "Sander Spiegelaar",
+		"email": "sanderspiegelaar@gmail.com"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/sanderspiegelaar/n8n-nodes-openrouter-visymo-v2.git"
+	},
+	"scripts": {
+		"build": "n8n-node build",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"test": "npm run build && node --test tests/*.test.js",
+		"release": "n8n-node release",
+		"prepublishOnly": "n8n-node prerelease"
+	},
+	"files": [
+		"dist"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": false,
+		"credentials": [
+			"dist/credentials/OpenRouterApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js"
+		]
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "*",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"release-it": "^19.0.4",
+		"typescript": "5.9.2"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	},
+	"dependencies": {
+		"ajv": "^8.20.0",
+		"ajv-formats": "^3.0.1"
+	}
 }
