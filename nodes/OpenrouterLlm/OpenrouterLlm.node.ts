@@ -35,6 +35,7 @@ const SUPPORTED_MODEL_VARIANTS = [
 	':online',
 ] as const;
 const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'] as const;
+const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
 
 export class OpenrouterLlm implements INodeType {
 	description: INodeTypeDescription = {
@@ -53,7 +54,7 @@ export class OpenrouterLlm implements INodeType {
 		usableAsTool: true,
 		credentials: [
 			{
-				name: 'openRouterApi',
+				name: OPENROUTER_CUSTOM_CREDENTIAL_NAME,
 				required: true,
 			},
 		],
@@ -747,11 +748,11 @@ export class OpenrouterLlm implements INodeType {
 				this: ILoadOptionsFunctions,
 				filter?: string,
 			): Promise<INodeListSearchResult> {
-				const credentials = await this.getCredentials('openRouterApi');
+				const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
 				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
 				const response = (await this.helpers.httpRequestWithAuthentication.call(
 					this,
-					'openRouterApi',
+					OPENROUTER_CUSTOM_CREDENTIAL_NAME,
 					{
 						method: 'GET',
 						baseURL: baseUrl,
@@ -787,11 +788,11 @@ export class OpenrouterLlm implements INodeType {
 			async getOpenRouterModelOptions(
 				this: ILoadOptionsFunctions,
 			): Promise<INodePropertyOptions[]> {
-				const credentials = await this.getCredentials('openRouterApi');
+				const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
 				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
 				const response = (await this.helpers.httpRequestWithAuthentication.call(
 					this,
-					'openRouterApi',
+					OPENROUTER_CUSTOM_CREDENTIAL_NAME,
 					{
 						method: 'GET',
 						baseURL: baseUrl,
@@ -818,7 +819,7 @@ export class OpenrouterLlm implements INodeType {
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
-				const credentials = await this.getCredentials('openRouterApi');
+				const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
 				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
 				const modelOptions = this.getNodeParameter('modelOptions', itemIndex, {}) as IDataObject;
 				const modelVariant = (modelOptions.modelVariant as string | undefined) ?? '';
@@ -854,7 +855,7 @@ export class OpenrouterLlm implements INodeType {
 
 					const response = (await this.helpers.httpRequestWithAuthentication.call(
 						this,
-						'openRouterApi',
+						OPENROUTER_CUSTOM_CREDENTIAL_NAME,
 						{
 							method: 'POST',
 							baseURL: baseUrl,
@@ -1506,7 +1507,7 @@ function buildProvider(
 
 	if (requireParameters === 'true' || requireParameters === 'false') {
 		provider.require_parameters = requireParameters === 'true';
-	} else if (outputMode === 'json_object' || outputMode === 'json_schema') {
+	} else if (outputMode === 'json_schema') {
 		provider.require_parameters = true;
 	}
 

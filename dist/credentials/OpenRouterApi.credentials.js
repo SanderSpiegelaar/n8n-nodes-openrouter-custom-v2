@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpenRouterApi = void 0;
 class OpenRouterApi {
     constructor() {
-        this.name = 'openRouterApi';
-        this.displayName = 'OpenRouter API';
+        this.name = 'openRouterCustomV2Api';
+        this.displayName = 'OpenRouter Custom V2 API';
         this.icon = 'file:../nodes/OpenrouterLlm/openrouter.svg';
         this.documentationUrl = 'https://openrouter.ai/docs';
         this.properties = [

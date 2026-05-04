@@ -48,12 +48,12 @@ test('package wiring points at Openrouter LLM node and OpenRouter API credential
 	]);
 });
 
-test('OpenRouter API credential exposes secure API key and attribution fields', () => {
+test('OpenRouter custom credential uses a non-conflicting type and exposes secure API key and attribution fields', () => {
 	const { OpenRouterApi } = require('../dist/credentials/OpenRouterApi.credentials.js');
 	const credential = new OpenRouterApi();
 
-	assert.equal(credential.name, 'openRouterApi');
-	assert.equal(credential.displayName, 'OpenRouter API');
+	assert.equal(credential.name, 'openRouterCustomV2Api');
+	assert.equal(credential.displayName, 'OpenRouter Custom V2 API');
 
 	const propertiesByName = Object.fromEntries(
 		credential.properties.map((property) => [property.name, property]),
@@ -63,6 +63,18 @@ test('OpenRouter API credential exposes secure API key and attribution fields', 
 	assert.equal(propertiesByName.baseUrl.default, 'https://openrouter.ai/api/v1');
 	assert.ok(propertiesByName.siteUrl);
 	assert.ok(propertiesByName.appName);
+});
+
+test('Openrouter LLM requires the package-specific OpenRouter credential type', () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+
+	assert.deepEqual(node.description.credentials, [
+		{
+			name: 'openRouterCustomV2Api',
+			required: true,
+		},
+	]);
 });
 
 test('Openrouter LLM posts one chat completion request per input item', async () => {
@@ -1197,7 +1209,7 @@ test('Openrouter LLM combines response-healing and web plugins in a single plugi
 	]);
 });
 
-test('Openrouter LLM defaults provider.require_parameters to true in structured modes when override is Default', async () => {
+test('Openrouter LLM does not force provider.require_parameters in json_object mode', async () => {
 	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
 	const node = new OpenrouterLlm();
 	const { context, requests } = createExecutionContext(
@@ -1206,6 +1218,35 @@ test('Openrouter LLM defaults provider.require_parameters to true in structured 
 			prompt: 'Hello',
 			generation: { temperature: 0.2, maxTokens: 100 },
 			outputMode: 'json_object',
+		},
+		{
+			responder: () => ({
+				id: 'gen-1',
+				choices: [{ message: { role: 'assistant', content: '{"ok":true}' } }],
+			}),
+		},
+	);
+
+	await node.execute.call(context);
+
+	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'provider'), false);
+});
+
+test('Openrouter LLM defaults provider.require_parameters to true in json_schema mode when override is Default', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const schema = {
+		type: 'object',
+		required: ['ok'],
+		properties: { ok: { type: 'boolean' } },
+	};
+	const { context, requests } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			generation: { temperature: 0.2, maxTokens: 100 },
+			outputMode: 'json_schema',
+			jsonSchema: JSON.stringify(schema),
 		},
 		{
 			responder: () => ({

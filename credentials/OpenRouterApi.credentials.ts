@@ -6,9 +6,9 @@ import type {
 } from 'n8n-workflow';
 
 export class OpenRouterApi implements ICredentialType {
-	name = 'openRouterApi';
+	name = 'openRouterCustomV2Api';
 
-	displayName = 'OpenRouter API';
+	displayName = 'OpenRouter Custom V2 API';
 
 	icon = 'file:../nodes/OpenrouterLlm/openrouter.svg' as const;
 

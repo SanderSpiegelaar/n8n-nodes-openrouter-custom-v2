@@ -17,6 +17,7 @@ const SUPPORTED_MODEL_VARIANTS = [
     ':online',
 ];
 const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'];
+const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
 class OpenrouterLlm {
     constructor() {
         this.description = {
@@ -35,7 +36,7 @@ class OpenrouterLlm {
             usableAsTool: true,
             credentials: [
                 {
-                    name: 'openRouterApi',
+                    name: OPENROUTER_CUSTOM_CREDENTIAL_NAME,
                     required: true,
                 },
             ],
@@ -719,9 +720,9 @@ class OpenrouterLlm {
             listSearch: {
                 async getOpenRouterModels(filter) {
                     var _a, _b;
-                    const credentials = await this.getCredentials('openRouterApi');
+                    const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
                     const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
-                    const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'openRouterApi', {
+                    const response = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
                         method: 'GET',
                         baseURL: baseUrl,
                         url: '/models',
@@ -750,9 +751,9 @@ class OpenrouterLlm {
             loadOptions: {
                 async getOpenRouterModelOptions() {
                     var _a;
-                    const credentials = await this.getCredentials('openRouterApi');
+                    const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
                     const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
-                    const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'openRouterApi', {
+                    const response = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
                         method: 'GET',
                         baseURL: baseUrl,
                         url: '/models',
@@ -776,7 +777,7 @@ class OpenrouterLlm {
         const returnData = [];
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
             try {
-                const credentials = await this.getCredentials('openRouterApi');
+                const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
                 const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
                 const modelOptions = this.getNodeParameter('modelOptions', itemIndex, {});
                 const modelVariant = (_a = modelOptions.modelVariant) !== null && _a !== void 0 ? _a : '';
@@ -803,7 +804,7 @@ class OpenrouterLlm {
                     if (correctiveMessages.length > 0) {
                         body.messages = [...body.messages, ...correctiveMessages];
                     }
-                    const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'openRouterApi', {
+                    const response = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
                         method: 'POST',
                         baseURL: baseUrl,
                         url: '/chat/completions',
@@ -1206,7 +1207,7 @@ function buildProvider(executeFunctions, itemIndex, outputMode = 'text') {
     if (requireParameters === 'true' || requireParameters === 'false') {
         provider.require_parameters = requireParameters === 'true';
     }
-    else if (outputMode === 'json_object' || outputMode === 'json_schema') {
+    else if (outputMode === 'json_schema') {
         provider.require_parameters = true;
     }
     return Object.keys(provider).length === 0 ? undefined : provider;
