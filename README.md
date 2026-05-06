@@ -1,56 +1,86 @@
 # n8n-nodes-openrouter-custom-v2
 
-This is an n8n community node for sending chat completion requests through
-OpenRouter.
+[n8n](https://n8n.io/) community package that adds an **Openrouter LLM** node for chat completions via [OpenRouter](https://openrouter.ai/) — one HTTP API to route prompts to many hosted models.
 
-OpenRouter provides one API for routing prompts to many hosted language models.
+**Package:** `n8n-nodes-openrouter-custom-v2` · **License:** MIT
 
-[n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/sustainable-use-license/) workflow automation platform.
+## Contents
 
-[Installation](#installation)
-[Operations](#operations)
-[Credentials](#credentials)
-[Compatibility](#compatibility)
-[Usage](#usage)
-[Resources](#resources)
-[Version history](#version-history)
+- [Features](#features)
+- [Installation](#installation)
+- [Credentials](#credentials)
+- [Usage](#usage)
+- [Development](#development)
+- [Compatibility](#compatibility)
+- [Resources](#resources)
+- [Version history](#version-history)
+
+## Features
+
+- **Chat completions** — Calls OpenRouter `POST /chat/completions` and returns assistant text plus the raw API response on each output item.
+- **Model selection** — Pick a model from a searchable list (loaded from OpenRouter) or enter a model ID / expression.
+- **Model options** — Fallback models, OpenRouter model variants (e.g. `:nitro`, `:online`), with validation where combinations conflict.
+- **Prompt modes** — Simple prompt, system + user split, or full **Messages JSON** for multi-turn chats.
+- **Generation & reasoning** — Common sampling params, optional reasoning controls (where supported).
+- **Structured output** — Optional JSON Schema with AJV validation and retry behaviour for reliable machine-readable results.
+- **Provider routing** — Allow/deny providers, sort order, and related OpenRouter routing fields.
+- **Integrations** — Custom headers, metadata, Langfuse trace ID, web search–related options where applicable.
+- **AI tools** — Node is marked usable as an n8n AI tool (`usableAsTool`).
 
 ## Installation
 
-Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) in the n8n community nodes documentation.
+Install as a [community node](https://docs.n8n.io/integrations/community-nodes/installation/) from the n8n UI, or add the package to your n8n environment per the same guide.
 
-## Operations
-
-- Openrouter LLM: send one prompt per incoming n8n item to
-  `POST /chat/completions` and return the generated text plus the raw response.
+Package name for npm-style installs: `n8n-nodes-openrouter-custom-v2`.
 
 ## Credentials
 
-Create an OpenRouter API key, then add an `OpenRouter API` credential in n8n.
-The credential supports:
+In n8n, create **OpenRouter Custom V2 API** credentials (tested against `GET /models`).
 
-- API key
-- Base URL override for OpenRouter-compatible endpoints
-- Optional site URL for OpenRouter attribution
-- Optional app name for OpenRouter attribution
-
-## Compatibility
-
-Built with the n8n community node tooling and tested against the package
-versions in this repository.
+| Field    | Purpose                                                                 |
+| -------- | ----------------------------------------------------------------------- |
+| API key  | Bearer token for OpenRouter                                             |
+| Base URL | OpenRouter-compatible API base (default `https://openrouter.ai/api/v1`) |
+| Site URL | Optional; sent for OpenRouter attribution (`HTTP-Referer`)              |
+| App name | Optional; sent as `X-OpenRouter-Title`                                  |
 
 ## Usage
 
-Add the Openrouter LLM node to a workflow, select an OpenRouter model ID, and
-provide a prompt. Expressions can read each incoming item, so one node execution
-can make one chat completion request per item.
+1. Add the **Openrouter LLM** node and attach **OpenRouter Custom V2 API** credentials.
+2. Choose a model (list or ID).
+3. Set prompts using expressions so each **input item** can drive its own request — one completion per item.
+
+See [OpenRouter docs](https://openrouter.ai/docs) for model IDs, pricing, and provider-specific behaviour.
+
+## Development
+
+Requires Node.js and npm. From the repository root:
+
+| Command                             | Description                    |
+| ----------------------------------- | ------------------------------ |
+| `npm run build`                     | Build with `n8n-node`          |
+| `npm run dev`                       | Development mode for local n8n |
+| `npm run lint` / `npm run lint:fix` | ESLint                         |
+| `npm test`                          | Build then run tests           |
+
+Built artifacts are emitted under `dist/` and are what n8n loads (see `package.json` → `n8n.nodes` / `n8n.credentials`).
+
+## Compatibility
+
+Built with [`@n8n/node-cli`](https://www.npmjs.com/package/@n8n/node-cli) (`n8n-node`). Peer dependency: `n8n-workflow` (version resolved by your n8n install).
 
 ## Resources
 
-- [n8n community nodes documentation](https://docs.n8n.io/integrations/#community-nodes)
+- [n8n community nodes](https://docs.n8n.io/integrations/#community-nodes)
+- [Creating n8n nodes](https://docs.n8n.io/integrations/creating-nodes/overview/)
 - [OpenRouter documentation](https://openrouter.ai/docs)
 
 ## Version history
 
-- 0.1.0: Initial Openrouter LLM shell with API key credentials and chat
-  completions support.
+Summary below; full notes are in [CHANGELOG.md](./CHANGELOG.md).
+
+- **0.1.3** — Project cleanup; credential type renamed to **OpenRouter Custom V2 API** (`openRouterCustomV2Api`) for compatibility with the Openrouter LLM node.
+- **0.1.2** — README and metadata aligned with package name `n8n-nodes-openrouter-custom-v2`.
+- **0.1.1** — Structured output (AJV), provider routing, model variants & fallbacks, web search plugin (`:online`) conflict handling, and related UX.
+
+Initial **0.1.0** release introduced the Openrouter LLM node with chat completions and API key credentials.
