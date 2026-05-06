@@ -1,8 +1,8 @@
 {
-    "node": "n8n-nodes-openrouter-visymo-v2.openrouterLlm",
+    "node": "n8n-nodes-openrouter-custom-v2.openrouterLlm",
     "nodeVersion": "1.0",
     "codexVersion": "1.0",
-    "categories": ["Development", "AI"],
+    "categories": ["Development", "AI, LLM & Voice"],
     "resources": {
         "credentialDocumentation": [
             {
