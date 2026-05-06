@@ -1,6 +1,6 @@
 {
     "name": "n8n-nodes-openrouter-custom-v2",
-    "version": "0.1.3",
+    "version": "0.1.3-1",
     "description": "n8n community node for sending chat completion requests through OpenRouter.",
     "license": "MIT",
     "homepage": "",
@@ -16,7 +16,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/sanderspiegelaar/n8n-nodes-openrouter-visymo-v2.git"
+        "url": "https://github.com/sanderspiegelaar/n8n-nodes-openrouter-custom-v2.git"
     },
     "scripts": {
         "build": "n8n-node build",
