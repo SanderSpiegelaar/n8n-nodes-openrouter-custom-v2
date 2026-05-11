@@ -24,19 +24,26 @@ _Avoid_: Model options API, model list service
 The n8n-visible fields that configure an OpenRouter Execution. The n8n adapter normalizes these fields into plain Structured Output configuration before invoking Structured Output behavior.
 _Avoid_: UI config, properties blob
 
-**repair sender callback**:
-The seam where Structured Output asks the n8n adapter to send a Structured Output Repair request to OpenRouter. Structured Output builds the repair request body and consumes the returned text and response object; the n8n adapter owns credentials, base URL handling, headers, and n8n HTTP helper usage.
-_Avoid_: transport abstraction, HTTP client wrapper
+**n8n adapter module**:
+The n8n-facing module that owns node description composition, parameter reads, credentials, n8n HTTP helper usage, Continue On Fail behavior, and final workflow output shaping.
+_Avoid_: Monolith node file, god module
+
+**OpenRouter chat sender callback**:
+The seam where OpenRouter Execution asks the n8n adapter to send an OpenRouter chat-completion request. OpenRouter Execution and Structured Output build request bodies and consume returned text and response objects; the n8n adapter owns credentials, base URL handling, headers, and n8n HTTP helper usage.
+_Avoid_: transport abstraction, HTTP client wrapper, repair sender callback
 
 ## Relationships
 
 - An **OpenRouter Execution** has exactly one initial OpenRouter chat-completion request.
 - An **OpenRouter Execution** may have zero or more **Structured Output Repair** requests after that initial response.
 - The n8n adapter owns the initial request, OpenRouter credentials, Node Parameter Surface normalization, Continue On Fail behavior, and final workflow output shaping.
+- Refactoring the **n8n adapter module** is architecture-only unless a separate product decision explicitly changes workflow-visible behavior.
 - **Structured Output** is validated locally after OpenRouter returns the initial response.
 - **Structured Output** returns success or failure as outcome data rather than n8n framework-specific errors.
+- **OpenRouter Execution** returns Structured Output validation failures as data; the **n8n adapter module** translates them into Continue On Fail item data or n8n errors.
 - **Structured Output Repair** consumes validation errors from **Structured Output** validation.
-- **Structured Output Repair** requests are sent through a **repair sender callback** supplied by the n8n adapter.
+- OpenRouter chat-completion requests are sent through an **OpenRouter chat sender callback** supplied by the n8n adapter.
+- **Structured Output Repair** requests reuse the **OpenRouter chat sender callback** after the initial response fails local validation.
 - The **Node Parameter Surface** configures **OpenRouter Execution**, **Structured Output**, and **Structured Output Repair**.
 - The **OpenRouter Model Catalog** supplies selectable models for the **Node Parameter Surface**.
 
