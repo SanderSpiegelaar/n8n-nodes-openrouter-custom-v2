@@ -138,6 +138,69 @@ test('OpenRouter Execution public seam validates JSON Object success data', asyn
 	});
 });
 
+test('OpenRouter Execution public seam repairs Structured Output through the shared sender', async () => {
+	const { executeOpenRouter } = loadExecutionModule();
+	const requests = [];
+	const responses = [
+		{ response: { id: 'gen-1', choices: [{ message: { content: 'not json' } }] }, text: 'not json' },
+		{
+			response: { id: 'repair-1', choices: [{ message: { content: '{"json":{"ok":true}}' } }] },
+			text: '{"json":{"ok":true}}',
+		},
+	];
+
+	const result = await executeOpenRouter({
+		input: {
+			modelRouting: { primaryModel: 'openai/gpt-4o-mini' },
+			messages: [{ role: 'user', content: 'Return JSON' }],
+			outputMode: 'json_object',
+			metadata: {
+				defaults: {
+					executionId: 'exec-boundary',
+					workflowId: 'workflow-boundary',
+					workflowName: 'Boundary Workflow',
+					nodeName: 'Openrouter LLM',
+					itemIndex: 0,
+				},
+			},
+			structuredOutput: {
+				mode: 'json_object',
+				repair: {
+					maxAttempts: 1,
+					model: 'anthropic/claude-3-haiku',
+					temperature: 0.2,
+					reasoningEffort: 'low',
+					metadata: (attempt, model) => ({ validation_attempt: attempt, model }),
+				},
+			},
+		},
+		sendChat: async (body) => {
+			requests.push(JSON.parse(JSON.stringify(body)));
+			return responses[requests.length - 1];
+		},
+	});
+
+	assert.equal(requests.length, 2);
+	assert.deepEqual(requests[0].response_format, { type: 'json_object' });
+	assert.equal(requests[0].metadata.validation_attempt, 1);
+	assert.equal(requests[1].model, 'anthropic/claude-3-haiku');
+	assert.equal(requests[1].temperature, 0.2);
+	assert.deepEqual(requests[1].reasoning, { effort: 'low' });
+	assert.deepEqual(requests[1].response_format, { type: 'json_object' });
+	assert.equal(requests[1].metadata.validation_attempt, 2);
+	assert.equal(requests[1].metadata.model, 'anthropic/claude-3-haiku');
+	assert.match(requests[1].messages[0].content, /not json/);
+	assert.deepEqual(result, {
+		kind: 'success',
+		data: {
+			text: '{"ok":true}',
+			structured: { ok: true },
+			response: responses[1].response,
+			structuredOutputRepair: { repaired: true, repairAttempts: 1 },
+		},
+	});
+});
+
 test('OpenRouter Execution public seam returns Structured Output failure data', async () => {
 	const { executeOpenRouter } = loadExecutionModule();
 
