@@ -26,6 +26,7 @@ import {
 	type CompiledStructuredSchema,
 	type JsonSchemaResponseFormat,
 } from './OpenRouterExecutionInputBuilder';
+import { buildProvider, getSelectedModelVariant, validateRouting } from './OpenRouterRouting';
 
 type ChatCompletionResponse = IDataObject & {
 	choices?: Array<{
@@ -848,8 +849,7 @@ export class OpenrouterLlm implements INodeType {
 			try {
 				const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
 				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
-				const modelOptions = this.getNodeParameter('modelOptions', itemIndex, {}) as IDataObject;
-				const modelVariant = (modelOptions.modelVariant as string | undefined) ?? '';
+				const modelVariant = getSelectedModelVariant(this, itemIndex);
 				const outputMode = this.getNodeParameter('outputMode', itemIndex, 'text') as OutputMode;
 				const maxRepairAttempts =
 					outputMode === 'text'
@@ -979,60 +979,6 @@ function buildHeaders(executeFunctions: IExecuteFunctions, itemIndex: number): I
 	return headers;
 }
 
-function collectProviderNamesFromCollection(
-	collection: { values?: Array<{ name?: string }> } | undefined,
-): string[] {
-	return ((collection ?? {}).values ?? [])
-		.map((row) => row.name?.trim() ?? '')
-		.filter((name) => name !== '');
-}
-
-function buildProvider(
-	executeFunctions: IExecuteFunctions,
-	itemIndex: number,
-	outputMode: OutputMode = 'text',
-): IDataObject | undefined {
-	const provider: IDataObject = {};
-	const routing = executeFunctions.getNodeParameter(
-		'providerRouting',
-		itemIndex,
-		{},
-	) as IDataObject;
-	const allow = collectProviderNamesFromCollection(
-		routing.allow as { values?: Array<{ name?: string }> } | undefined,
-	);
-	const deny = collectProviderNamesFromCollection(
-		routing.deny as { values?: Array<{ name?: string }> } | undefined,
-	);
-	const sort = (routing.sort as string | undefined) ?? '';
-	const allowFallbacks = (routing.allowFallbacks as string | undefined) ?? '';
-	const requireParameters = (routing.requireParameters as string | undefined) ?? '';
-
-	if (allow.length > 0) {
-		provider.only = allow;
-	}
-
-	if (deny.length > 0) {
-		provider.ignore = deny;
-	}
-
-	if (sort !== '') {
-		provider.sort = sort;
-	}
-
-	if (allowFallbacks === 'true' || allowFallbacks === 'false') {
-		provider.allow_fallbacks = allowFallbacks === 'true';
-	}
-
-	if (requireParameters === 'true' || requireParameters === 'false') {
-		provider.require_parameters = requireParameters === 'true';
-	} else if (outputMode === 'json_schema') {
-		provider.require_parameters = true;
-	}
-
-	return Object.keys(provider).length === 0 ? undefined : provider;
-}
-
 type OutputMode = StructuredOutputMode;
 
 type StructuredOutputFailureDiagnostics = {
@@ -1146,51 +1092,4 @@ function isOpenAiJsonSchemaWrapper(
 function truncateForError(text: string): string {
 	const limit = 2000;
 	return text.length <= limit ? text : `${text.slice(0, limit)}...[truncated]`;
-}
-
-function validateRouting(
-	executeFunctions: IExecuteFunctions,
-	modelVariant: string,
-	provider: IDataObject | undefined,
-	webPluginEnabled: boolean = false,
-): void {
-	if (webPluginEnabled && modelVariant === ':online') {
-		throw new NodeOperationError(
-			executeFunctions.getNode(),
-			'Model Variant :online conflicts with the Web Search Plugin. Disable one of the two — both routes inject web search results.',
-		);
-	}
-
-	if (provider === undefined) {
-		return;
-	}
-
-	if (provider.sort !== undefined && modelVariant === ':nitro') {
-		throw new NodeOperationError(
-			executeFunctions.getNode(),
-			'Model Variant :nitro conflicts with Provider Sort. Remove one of the two — :nitro already requests throughput routing.',
-		);
-	}
-
-	if (provider.sort !== undefined && modelVariant === ':floor') {
-		throw new NodeOperationError(
-			executeFunctions.getNode(),
-			'Model Variant :floor conflicts with Provider Sort. Remove one of the two — :floor already requests price routing.',
-		);
-	}
-
-	const allow = Array.isArray(provider.only) ? (provider.only as string[]) : [];
-	const deny = Array.isArray(provider.ignore) ? (provider.ignore as string[]) : [];
-
-	if (allow.length > 0 && deny.length > 0) {
-		const denyNormalized = new Set(deny.map((name) => name.trim().toLowerCase()));
-		const conflict = allow.find((name) => denyNormalized.has(name.trim().toLowerCase()));
-
-		if (conflict !== undefined) {
-			throw new NodeOperationError(
-				executeFunctions.getNode(),
-				`Provider "${conflict}" appears in both Allow Providers and Deny Providers. Remove it from one list.`,
-			);
-		}
-	}
 }

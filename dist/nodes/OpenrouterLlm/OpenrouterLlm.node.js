@@ -6,6 +6,7 @@ const StructuredOutputParser_1 = require("./StructuredOutputParser");
 const OpenRouterModelCatalog_1 = require("./OpenRouterModelCatalog");
 const OpenRouterExecution_1 = require("./OpenRouterExecution");
 const OpenRouterExecutionInputBuilder_1 = require("./OpenRouterExecutionInputBuilder");
+const OpenRouterRouting_1 = require("./OpenRouterRouting");
 const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'];
 const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
 const openRouterModelCatalogParameters = [
@@ -800,23 +801,22 @@ class OpenrouterLlm {
         };
     }
     async execute() {
-        var _a, _b;
+        var _a;
         const items = this.getInputData();
         const returnData = [];
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
             try {
                 const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
                 const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
-                const modelOptions = this.getNodeParameter('modelOptions', itemIndex, {});
-                const modelVariant = (_a = modelOptions.modelVariant) !== null && _a !== void 0 ? _a : '';
+                const modelVariant = (0, OpenRouterRouting_1.getSelectedModelVariant)(this, itemIndex);
                 const outputMode = this.getNodeParameter('outputMode', itemIndex, 'text');
                 const maxRepairAttempts = outputMode === 'text'
                     ? 0
                     : this.getNodeParameter('maxValidationAttempts', itemIndex, 2);
                 const compiledSchema = outputMode === 'json_schema' ? compileSchema(this, itemIndex) : undefined;
-                const provider = buildProvider(this, itemIndex, outputMode);
+                const provider = (0, OpenRouterRouting_1.buildProvider)(this, itemIndex, outputMode);
                 const webPluginEnabled = (0, OpenRouterExecutionInputBuilder_1.buildWebPlugin)(this, itemIndex) !== undefined;
-                validateRouting(this, modelVariant, provider, webPluginEnabled);
+                (0, OpenRouterRouting_1.validateRouting)(this, modelVariant, provider, webPluginEnabled);
                 const headers = buildHeaders(this, itemIndex);
                 {
                     const executionResult = await (0, OpenRouterExecution_1.executeOpenRouter)({
@@ -867,7 +867,7 @@ class OpenrouterLlm {
                 if (error instanceof n8n_workflow_1.NodeOperationError) {
                     throw new n8n_workflow_1.NodeOperationError(this.getNode(), error.message, {
                         itemIndex,
-                        description: (_b = error.description) !== null && _b !== void 0 ? _b : undefined,
+                        description: (_a = error.description) !== null && _a !== void 0 ? _a : undefined,
                     });
                 }
                 throw new n8n_workflow_1.NodeApiError(this.getNode(), { message: error instanceof Error ? error.message : String(error) }, { itemIndex });
@@ -897,41 +897,6 @@ function buildHeaders(executeFunctions, itemIndex) {
         headers[name] = (_e = header.value) !== null && _e !== void 0 ? _e : '';
     }
     return headers;
-}
-function collectProviderNamesFromCollection(collection) {
-    var _a;
-    return ((_a = (collection !== null && collection !== void 0 ? collection : {}).values) !== null && _a !== void 0 ? _a : [])
-        .map((row) => { var _a, _b; return (_b = (_a = row.name) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : ''; })
-        .filter((name) => name !== '');
-}
-function buildProvider(executeFunctions, itemIndex, outputMode = 'text') {
-    var _a, _b, _c;
-    const provider = {};
-    const routing = executeFunctions.getNodeParameter('providerRouting', itemIndex, {});
-    const allow = collectProviderNamesFromCollection(routing.allow);
-    const deny = collectProviderNamesFromCollection(routing.deny);
-    const sort = (_a = routing.sort) !== null && _a !== void 0 ? _a : '';
-    const allowFallbacks = (_b = routing.allowFallbacks) !== null && _b !== void 0 ? _b : '';
-    const requireParameters = (_c = routing.requireParameters) !== null && _c !== void 0 ? _c : '';
-    if (allow.length > 0) {
-        provider.only = allow;
-    }
-    if (deny.length > 0) {
-        provider.ignore = deny;
-    }
-    if (sort !== '') {
-        provider.sort = sort;
-    }
-    if (allowFallbacks === 'true' || allowFallbacks === 'false') {
-        provider.allow_fallbacks = allowFallbacks === 'true';
-    }
-    if (requireParameters === 'true' || requireParameters === 'false') {
-        provider.require_parameters = requireParameters === 'true';
-    }
-    else if (outputMode === 'json_schema') {
-        provider.require_parameters = true;
-    }
-    return Object.keys(provider).length === 0 ? undefined : provider;
 }
 function buildStructuredOutputError(executeFunctions, itemIndex, attempt, diagnostics) {
     const error = new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `Structured output validation failed after ${attempt} attempts: ${diagnostics.errors.join('; ')}. Raw model text: ${truncateForError(diagnostics.latestRepairText || diagnostics.originalRawText)}`, {
@@ -1002,28 +967,5 @@ function isOpenAiJsonSchemaWrapper(value) {
 function truncateForError(text) {
     const limit = 2000;
     return text.length <= limit ? text : `${text.slice(0, limit)}...[truncated]`;
-}
-function validateRouting(executeFunctions, modelVariant, provider, webPluginEnabled = false) {
-    if (webPluginEnabled && modelVariant === ':online') {
-        throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'Model Variant :online conflicts with the Web Search Plugin. Disable one of the two — both routes inject web search results.');
-    }
-    if (provider === undefined) {
-        return;
-    }
-    if (provider.sort !== undefined && modelVariant === ':nitro') {
-        throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'Model Variant :nitro conflicts with Provider Sort. Remove one of the two — :nitro already requests throughput routing.');
-    }
-    if (provider.sort !== undefined && modelVariant === ':floor') {
-        throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'Model Variant :floor conflicts with Provider Sort. Remove one of the two — :floor already requests price routing.');
-    }
-    const allow = Array.isArray(provider.only) ? provider.only : [];
-    const deny = Array.isArray(provider.ignore) ? provider.ignore : [];
-    if (allow.length > 0 && deny.length > 0) {
-        const denyNormalized = new Set(deny.map((name) => name.trim().toLowerCase()));
-        const conflict = allow.find((name) => denyNormalized.has(name.trim().toLowerCase()));
-        if (conflict !== undefined) {
-            throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `Provider "${conflict}" appears in both Allow Providers and Deny Providers. Remove it from one list.`);
-        }
-    }
 }
 //# sourceMappingURL=OpenrouterLlm.node.js.map

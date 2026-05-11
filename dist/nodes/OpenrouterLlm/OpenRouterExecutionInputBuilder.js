@@ -4,26 +4,19 @@ exports.buildOpenRouterExecutionInput = buildOpenRouterExecutionInput;
 exports.buildWebPlugin = buildWebPlugin;
 const n8n_workflow_1 = require("n8n-workflow");
 const StructuredOutputParser_1 = require("./StructuredOutputParser");
+const OpenRouterRouting_1 = require("./OpenRouterRouting");
 const VALID_MESSAGE_ROLES = ['system', 'user', 'assistant'];
-const SUPPORTED_MODEL_VARIANTS = [
-    ':exacto',
-    ':extended',
-    ':floor',
-    ':free',
-    ':nitro',
-    ':online',
-];
 function buildOpenRouterExecutionInput(executeFunctions, itemIndex, provider, outputMode, compiledSchema, maxRepairAttempts) {
     var _a, _b, _c;
     const workflow = executeFunctions.getWorkflow();
     const reasoning = buildReasoning(executeFunctions, executeFunctions.getNodeParameter('reasoning', itemIndex, {}));
     const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {});
     const sessionId = (_a = integrations.sessionId) !== null && _a !== void 0 ? _a : '';
-    const primaryModel = resolvePrimaryModel(executeFunctions, itemIndex);
+    const primaryModel = (0, OpenRouterRouting_1.resolvePrimaryModel)(executeFunctions, itemIndex);
     return {
         modelRouting: {
             primaryModel,
-            fallbackModels: resolveFallbackModels(executeFunctions, itemIndex),
+            fallbackModels: (0, OpenRouterRouting_1.resolveFallbackModels)(executeFunctions, itemIndex),
         },
         messages: buildMessages(executeFunctions, itemIndex),
         outputMode,
@@ -54,7 +47,7 @@ function buildStructuredOutputExecutionConfig(executeFunctions, itemIndex, outpu
         return undefined;
     }
     const repair = executeFunctions.getNodeParameter('repair', itemIndex, {});
-    const repairModel = resolveModelLocator(repair.model, StructuredOutputParser_1.DEFAULT_REPAIR_MODEL);
+    const repairModel = (0, OpenRouterRouting_1.resolveModelLocator)(repair.model, StructuredOutputParser_1.DEFAULT_REPAIR_MODEL);
     return {
         mode: outputMode,
         compiledValidator: compiledSchema === null || compiledSchema === void 0 ? void 0 : compiledSchema.validator,
@@ -109,7 +102,7 @@ function buildSamplingInput(executeFunctions, itemIndex) {
     };
 }
 function buildMetadataExtras(executeFunctions, itemIndex) {
-    const defaults = buildMetadata(executeFunctions, itemIndex, resolvePrimaryModel(executeFunctions, itemIndex));
+    const defaults = buildMetadata(executeFunctions, itemIndex, (0, OpenRouterRouting_1.resolvePrimaryModel)(executeFunctions, itemIndex));
     const extras = { ...defaults };
     const defaultKeys = new Set([
         'execution_id',
@@ -211,47 +204,6 @@ function validateRange(executeFunctions, value, label) {
 }
 function isUnset(value) {
     return value === undefined || value === null || value === '';
-}
-function resolvePrimaryModel(executeFunctions, itemIndex) {
-    var _a;
-    const modelParameter = executeFunctions.getNodeParameter('model', itemIndex);
-    const modelId = resolveModelLocator(modelParameter, '');
-    const modelOptions = executeFunctions.getNodeParameter('modelOptions', itemIndex, {});
-    const modelVariant = (_a = modelOptions.modelVariant) !== null && _a !== void 0 ? _a : '';
-    if (modelId.trim() === '') {
-        throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'Model ID must not be empty.');
-    }
-    if (modelVariant === '') {
-        return modelId;
-    }
-    if (!SUPPORTED_MODEL_VARIANTS.includes(modelVariant)) {
-        throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'Unsupported model variant selected.');
-    }
-    return `${stripSupportedVariant(modelId)}${modelVariant}`;
-}
-function resolveModelLocator(modelParameter, defaultModel) {
-    var _a;
-    if (modelParameter === undefined) {
-        return defaultModel;
-    }
-    return typeof modelParameter === 'string'
-        ? modelParameter
-        : ((_a = modelParameter.value) !== null && _a !== void 0 ? _a : defaultModel).toString();
-}
-function resolveFallbackModels(executeFunctions, itemIndex) {
-    var _a, _b;
-    const modelOptions = executeFunctions.getNodeParameter('modelOptions', itemIndex, {});
-    const fallbackModels = (_a = modelOptions.fallbackModels) !== null && _a !== void 0 ? _a : {};
-    return ((_b = fallbackModels.values) !== null && _b !== void 0 ? _b : [])
-        .map((fallback) => { var _a, _b; return (_b = (_a = fallback.model) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : ''; })
-        .filter((model) => model !== '');
-}
-function stripSupportedVariant(modelId) {
-    const supportedVariant = SUPPORTED_MODEL_VARIANTS.find((variant) => modelId.endsWith(variant));
-    if (!supportedVariant) {
-        return modelId;
-    }
-    return modelId.slice(0, -supportedVariant.length);
 }
 function buildMessages(executeFunctions, itemIndex) {
     const promptMode = executeFunctions.getNodeParameter('promptMode', itemIndex, 'systemUser');

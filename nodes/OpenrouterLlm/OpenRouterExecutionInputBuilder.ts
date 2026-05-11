@@ -8,22 +8,14 @@ import {
 	type StructuredOutputMode,
 } from './StructuredOutputParser';
 import type { ChatMessage, OpenRouterExecutionInput } from './OpenRouterExecution';
+import {
+	resolveFallbackModels,
+	resolveModelLocator,
+	resolvePrimaryModel,
+	type ModelLocatorValue,
+} from './OpenRouterRouting';
 
 const VALID_MESSAGE_ROLES = ['system', 'user', 'assistant'] as const;
-const SUPPORTED_MODEL_VARIANTS = [
-	':exacto',
-	':extended',
-	':floor',
-	':free',
-	':nitro',
-	':online',
-] as const;
-
-type ModelLocatorValue =
-	| string
-	| {
-			value?: string;
-	  };
 
 export type OutputMode = StructuredOutputMode;
 
@@ -352,74 +344,6 @@ function validateRange(executeFunctions: IExecuteFunctions, value: unknown, labe
 
 function isUnset(value: unknown): boolean {
 	return value === undefined || value === null || value === '';
-}
-
-function resolvePrimaryModel(executeFunctions: IExecuteFunctions, itemIndex: number): string {
-	const modelParameter = executeFunctions.getNodeParameter('model', itemIndex) as ModelLocatorValue;
-	const modelId = resolveModelLocator(modelParameter, '');
-	const modelOptions = executeFunctions.getNodeParameter(
-		'modelOptions',
-		itemIndex,
-		{},
-	) as IDataObject;
-	const modelVariant = (modelOptions.modelVariant as string | undefined) ?? '';
-
-	if (modelId.trim() === '') {
-		throw new NodeOperationError(executeFunctions.getNode(), 'Model ID must not be empty.');
-	}
-
-	if (modelVariant === '') {
-		return modelId;
-	}
-
-	if (
-		!SUPPORTED_MODEL_VARIANTS.includes(modelVariant as (typeof SUPPORTED_MODEL_VARIANTS)[number])
-	) {
-		throw new NodeOperationError(executeFunctions.getNode(), 'Unsupported model variant selected.');
-	}
-
-	return `${stripSupportedVariant(modelId)}${modelVariant}`;
-}
-
-function resolveModelLocator(
-	modelParameter: ModelLocatorValue | undefined,
-	defaultModel: string,
-): string {
-	if (modelParameter === undefined) {
-		return defaultModel;
-	}
-
-	return typeof modelParameter === 'string'
-		? modelParameter
-		: (modelParameter.value ?? defaultModel).toString();
-}
-
-function resolveFallbackModels(executeFunctions: IExecuteFunctions, itemIndex: number): string[] {
-	const modelOptions = executeFunctions.getNodeParameter(
-		'modelOptions',
-		itemIndex,
-		{},
-	) as IDataObject;
-	const fallbackModels =
-		(modelOptions.fallbackModels as
-			| {
-					values?: Array<{ model?: string }>;
-			  }
-			| undefined) ?? {};
-
-	return (fallbackModels.values ?? [])
-		.map((fallback) => fallback.model?.trim() ?? '')
-		.filter((model) => model !== '');
-}
-
-function stripSupportedVariant(modelId: string): string {
-	const supportedVariant = SUPPORTED_MODEL_VARIANTS.find((variant) => modelId.endsWith(variant));
-
-	if (!supportedVariant) {
-		return modelId;
-	}
-
-	return modelId.slice(0, -supportedVariant.length);
 }
 
 function buildMessages(executeFunctions: IExecuteFunctions, itemIndex: number): ChatMessage[] {
