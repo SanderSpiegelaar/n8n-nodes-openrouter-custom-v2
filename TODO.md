@@ -6,3 +6,5 @@
   - [ ] remove default output of response
   - [ ] add toggle to output response object in node output
 - [ ] Reorder node properties so prompt comes first
+- [ ] Filenaming consistency in tests -> kebab-case to PascalCase
+- [ ] Add Directories in `nodes/OpenrouterLlm` to improve codebase structure
