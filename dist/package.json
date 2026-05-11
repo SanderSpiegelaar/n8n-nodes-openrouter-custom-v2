@@ -1,5 +1,5 @@
 {
-    "name": "n8n-nodes-openrouter-custom",
+    "name": "n8n-nodes-openrouter-custom-v2",
     "version": "0.2.1",
     "description": "n8n community node for sending chat completion requests through OpenRouter.",
     "license": "MIT",

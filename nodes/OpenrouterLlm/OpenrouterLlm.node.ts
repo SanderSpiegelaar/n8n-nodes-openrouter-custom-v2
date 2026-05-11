@@ -52,7 +52,7 @@ const openRouterModelCatalogParameters: INodeProperties[] = [
 		displayName: 'Model',
 		name: 'model',
 		type: 'resourceLocator',
-		default: { mode: 'list', value: 'openai/gpt-4o-mini' },
+		default: { mode: 'list', value: 'openai/gpt-oss-120b' },
 		required: true,
 		modes: [
 			{
