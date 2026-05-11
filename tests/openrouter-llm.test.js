@@ -6,10 +6,12 @@ const packageJson = require('../package.json');
 function createExecutionContext(parameters, overrides = {}) {
 	const requests = [];
 	const inputItems = overrides.inputItems ?? [{ json: { prompt: 'Summarize the status' } }];
-	const responder = overrides.responder ?? (() => ({
-		id: 'gen-1',
-		choices: [{ message: { role: 'assistant', content: 'Done' } }],
-	}));
+	const responder =
+		overrides.responder ??
+		(() => ({
+			id: 'gen-1',
+			choices: [{ message: { role: 'assistant', content: 'Done' } }],
+		}));
 
 	return {
 		requests,
@@ -43,9 +45,7 @@ function createExecutionContext(parameters, overrides = {}) {
 
 test('package wiring points at Openrouter LLM node and OpenRouter API credential', () => {
 	assert.deepEqual(packageJson.n8n.nodes, ['dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js']);
-	assert.deepEqual(packageJson.n8n.credentials, [
-		'dist/credentials/OpenRouterApi.credentials.js',
-	]);
+	assert.deepEqual(packageJson.n8n.credentials, ['dist/credentials/OpenRouterApi.credentials.js']);
 });
 
 test('OpenRouter custom credential uses a non-conflicting type and exposes secure API key and attribution fields', () => {
@@ -75,6 +75,36 @@ test('Openrouter LLM requires the package-specific OpenRouter credential type', 
 			required: true,
 		},
 	]);
+});
+
+test('Openrouter LLM keeps the workflow-compatible top-level parameter surface', () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+
+	assert.deepEqual(
+		node.description.properties.map((property) => ({
+			name: property.name,
+			default: property.default,
+		})),
+		[
+			{ name: 'model', default: { mode: 'list', value: 'openai/gpt-4o-mini' } },
+			{ name: 'modelOptions', default: {} },
+			{ name: 'promptMode', default: 'systemUser' },
+			{ name: 'systemMessage', default: '' },
+			{ name: 'prompt', default: '' },
+			{ name: 'singlePrompt', default: '' },
+			{ name: 'messagesJson', default: '[]' },
+			{ name: 'generation', default: {} },
+			{ name: 'reasoning', default: {} },
+			{ name: 'advancedSampling', default: {} },
+			{ name: 'integrations', default: {} },
+			{ name: 'providerRouting', default: {} },
+			{ name: 'outputMode', default: 'text' },
+			{ name: 'jsonSchema', default: '{}' },
+			{ name: 'maxValidationAttempts', default: 2 },
+			{ name: 'repair', default: {} },
+		],
+	);
 });
 
 test('Openrouter LLM posts one chat completion request per input item', async () => {
@@ -501,9 +531,15 @@ test('Openrouter LLM maps reasoning modes without mixing effort and token budget
 	await node.execute.call(defaultEnabled.context);
 
 	assert.deepEqual(effort.requests[0].body.reasoning, { effort: 'xhigh', exclude: true });
-	assert.equal(Object.prototype.hasOwnProperty.call(effort.requests[0].body.reasoning, 'max_tokens'), false);
+	assert.equal(
+		Object.prototype.hasOwnProperty.call(effort.requests[0].body.reasoning, 'max_tokens'),
+		false,
+	);
 	assert.deepEqual(tokenBudget.requests[0].body.reasoning, { max_tokens: 512, exclude: true });
-	assert.equal(Object.prototype.hasOwnProperty.call(tokenBudget.requests[0].body.reasoning, 'effort'), false);
+	assert.equal(
+		Object.prototype.hasOwnProperty.call(tokenBudget.requests[0].body.reasoning, 'effort'),
+		false,
+	);
 	assert.deepEqual(defaultEnabled.requests[0].body.reasoning, {});
 });
 
@@ -512,7 +548,10 @@ test('Openrouter LLM validates numeric typed controls before making a request', 
 	const node = new OpenrouterLlm();
 	const invalidCases = [
 		[{ generation: { maxTokens: -1 } }, /max tokens must be greater than 0/i],
-		[{ reasoning: { mode: 'tokenBudget', maxTokens: 0 } }, /reasoning max tokens must be greater than 0/i],
+		[
+			{ reasoning: { mode: 'tokenBudget', maxTokens: 0 } },
+			/reasoning max tokens must be greater than 0/i,
+		],
 		[{ advancedSampling: { topK: 0 } }, /top k must be greater than 0/i],
 		[{ advancedSampling: { repetitionPenalty: 0 } }, /repetition penalty must be greater than 0/i],
 		[{ advancedSampling: { minP: -0.1 } }, /min p must be between 0 and 1/i],
@@ -584,7 +623,10 @@ test('Openrouter LLM sends Langfuse trace headers and body metadata without cros
 		payload: { ok: true },
 	});
 	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].headers, 'tenant'), false);
-	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body.metadata, 'X-Customer-Trace'), false);
+	assert.equal(
+		Object.prototype.hasOwnProperty.call(requests[0].body.metadata, 'X-Customer-Trace'),
+		false,
+	);
 });
 
 test('Openrouter LLM can disable the Langfuse trace header', async () => {
@@ -630,10 +672,7 @@ test('Openrouter LLM rejects invalid metadata rows before making a request', asy
 	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
 	const node = new OpenrouterLlm();
 	const invalidCases = [
-		[
-			{ values: [{ key: 'payload', valueMode: 'json', value: '{bad' }] },
-			/payload.*valid JSON/i,
-		],
+		[{ values: [{ key: 'payload', valueMode: 'json', value: '{bad' }] }, /payload.*valid JSON/i],
 		[
 			{ values: [{ key: 'execution_id', valueMode: 'string', value: 'override' }] },
 			/execution_id.*default metadata/i,
@@ -870,11 +909,7 @@ test('structured output outcome returns valid initial structured data without n8
 	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
 	const response = { id: 'gen-1', choices: [{ message: { content: '{"answer":42}' } }] };
 
-	const result = evaluateStructuredOutput(
-		{ mode: 'json_object' },
-		'{"answer":42}',
-		response,
-	);
+	const result = evaluateStructuredOutput({ mode: 'json_object' }, '{"answer":42}', response);
 
 	assert.deepEqual(result, {
 		ok: true,
@@ -890,11 +925,7 @@ test('structured output outcome returns diagnostic failure data before repair is
 		evaluateStructuredOutput,
 	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
 
-	const result = evaluateStructuredOutput(
-		{ mode: 'json_object' },
-		'[1,2,3]',
-		{ id: 'gen-1' },
-	);
+	const result = evaluateStructuredOutput({ mode: 'json_object' }, '[1,2,3]', { id: 'gen-1' });
 
 	assert.equal(result.ok, false);
 	assert.match(result.error.message, /non-null JSON object/i);
@@ -1009,11 +1040,9 @@ test('structured output outcome validates JSON Schema through the focused module
 		'{"email":"a@b.co"}',
 		{ id: 'gen-1' },
 	);
-	const invalid = evaluateStructuredOutput(
-		{ mode: 'json_schema', compiledValidator },
-		'{}',
-		{ id: 'gen-2' },
-	);
+	const invalid = evaluateStructuredOutput({ mode: 'json_schema', compiledValidator }, '{}', {
+		id: 'gen-2',
+	});
 
 	assert.equal(valid.ok, true);
 	assert.deepEqual(valid.structured, { email: 'a@b.co' });
@@ -1027,7 +1056,10 @@ test('structured output json_schema mode lets the schema decide the root type', 
 		compileStructuredOutputSchema,
 		evaluateStructuredOutput,
 	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
-	const arrayValidator = compileStructuredOutputSchema({ type: 'array', items: { type: 'number' } });
+	const arrayValidator = compileStructuredOutputSchema({
+		type: 'array',
+		items: { type: 'number' },
+	});
 	const stringValidator = compileStructuredOutputSchema({ type: 'string', minLength: 3 });
 
 	const arrayResult = evaluateStructuredOutput(
@@ -1063,14 +1095,20 @@ test('structured parser unwraps unambiguous n8n-style wrappers only', () => {
 		ok: true,
 		value: { answer: 42 },
 	});
-	assert.deepEqual(validateStructuredOutput('json_object', '{"json":{"structured":{"answer":42}}}'), {
-		ok: true,
-		value: { answer: 42 },
-	});
-	assert.deepEqual(validateStructuredOutput('json_object', '{"json":{"answer":42},"pairedItem":0}'), {
-		ok: true,
-		value: { json: { answer: 42 }, pairedItem: 0 },
-	});
+	assert.deepEqual(
+		validateStructuredOutput('json_object', '{"json":{"structured":{"answer":42}}}'),
+		{
+			ok: true,
+			value: { answer: 42 },
+		},
+	);
+	assert.deepEqual(
+		validateStructuredOutput('json_object', '{"json":{"answer":42},"pairedItem":0}'),
+		{
+			ok: true,
+			value: { json: { answer: 42 }, pairedItem: 0 },
+		},
+	);
 });
 
 test('Openrouter LLM in json_object mode rejects array and primitive responses after exhausting retries', async () => {
@@ -1259,7 +1297,10 @@ test('Openrouter LLM validates without inserting defaults or removing additional
 	assert.deepEqual(result[0][0].json.structuredOutputValidationErrors, [
 		'$ includes unsupported property "extra".',
 	]);
-	assert.equal(result[0][0].json.structuredOutputValidationDetails[0].keyword, 'additionalProperties');
+	assert.equal(
+		result[0][0].json.structuredOutputValidationDetails[0].keyword,
+		'additionalProperties',
+	);
 	assert.equal(result[0][0].json.structuredOutputOriginalText, '{"extra":true}');
 });
 
@@ -1414,7 +1455,10 @@ test('Openrouter LLM validates custom repair prompts before making a repair requ
 	const result = await node.execute.call(context);
 
 	assert.equal(requests.length, 1);
-	assert.match(result[0][0].json.error, /Repair Prompt Template is missing required placeholder \{instructions\}/i);
+	assert.match(
+		result[0][0].json.error,
+		/Repair Prompt Template is missing required placeholder \{instructions\}/i,
+	);
 });
 
 test('Openrouter LLM repairs invalid json_schema output with a JSON Object repair request', async () => {

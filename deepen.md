@@ -1,6 +1,7 @@
 # Code Context
 
 ## Files Retrieved
+
 1. `AGENTS.md` (lines 1-105) - project rules for n8n community-node structure, package wiring, and context docs.
 2. `docs/agents/domain.md` (lines 1-48) - domain-documentation guidance; no `CONTEXT.md` or `docs/adr/` files were present.
 3. `package.json` (lines 1-52) - package wiring, scripts, dependencies, and current n8n node/credential entries.
@@ -30,8 +31,8 @@
 // nodes/OpenrouterLlm/StructuredOutputParser.ts lines 3-17
 export type StructuredOutputMode = 'text' | 'json_object' | 'json_schema';
 export type StructuredValidationResult =
-  | { ok: true; value: unknown }
-  | { ok: false; errors: string[]; details: StructuredValidationIssue[] };
+	| { ok: true; value: unknown }
+	| { ok: false; errors: string[]; details: StructuredValidationIssue[] };
 ```
 
 - The parser module handles extraction, wrapper unwrapping, AJV validation, and readable error formatting in one implementation module (`StructuredOutputParser.ts` lines 19-161).
@@ -91,14 +92,6 @@ Start with `nodes/OpenrouterLlm/OpenrouterLlm.node.ts` around lines 898-1036. Th
 - **Solution:** Deepen the structured-output implementation by separating extraction, validation, and error formatting behind stable module seams while preserving the current public behavior.
 - **Benefits:** More precise parser-edge tests, safer changes to extraction heuristics, and clearer alignment with the PRD’s parse/validate/format responsibilities.
 
-### 4. Close PRD mismatches around structured-output instructions and human errors
-
-- **Files:** `.scratch/structured-output-parser-refactor/PRD.md` lines 87-124; `nodes/OpenrouterLlm/OpenrouterLlm.node.ts` lines 1066-1180 and 1214-1236; `package.json` lines 42-45.
-- **Problem:** The PRD calls for hidden initial structured-output instructions, schema included in initial instructions, and `ajv-human-errors`. Current initial requests only set `response_format`; repair instructions are generic and do not include the actual schema; dependencies include `ajv` and `ajv-formats` but not `ajv-human-errors`.
-- **Deletion test:** If provider-native `response_format` is removed or ignored by a provider, there is no independent instruction module to preserve first-pass structured-output behavior.
-- **Solution:** Add a local instruction-formatting implementation as part of the structured-output module, then let request building consume it for initial and repair calls.
-- **Benefits:** Better provider fallback behavior, clearer user-facing failures, and tighter conformance to the structured-output PRD.
-
 ### 5. Introduce an OpenRouter adapter seam for HTTP/model catalog behavior
 
 - **Files:** `nodes/OpenrouterLlm/OpenrouterLlm.node.ts` lines 827-896 and 943-956; `credentials/OpenRouterApi.credentials.ts` lines 1-61.
@@ -107,7 +100,7 @@ Start with `nodes/OpenrouterLlm/OpenrouterLlm.node.ts` around lines 898-1036. Th
 - **Solution:** Add an OpenRouter adapter module for model catalog retrieval and chat completion transport, leaving credentials as the n8n authentication adapter.
 - **Benefits:** Reduces duplication, improves testability of request options, and gives a clean seam for future OpenRouter API behavior without bloating the node module.
 
-### 6. Split tests by architectural seam
+### 7. Split tests by architectural seam
 
 - **Files:** `tests/openrouter-llm.test.js` lines 1-1644.
 - **Problem:** Tests provide strong regression coverage but are concentrated in one execution-level file and mostly require building `dist` first. Parser unit tests are embedded beside n8n execution tests, and private node helpers can only be exercised through full mocked executions.
@@ -115,7 +108,7 @@ Start with `nodes/OpenrouterLlm/OpenrouterLlm.node.ts` around lines 898-1036. Th
 - **Solution:** Keep execution tests for end-to-end behavior, but add focused tests near the deeper modules: parser/extraction, repair orchestration, request building, and OpenRouter adapter behavior.
 - **Benefits:** Faster feedback, clearer failure locality, and safer refactoring because each implementation seam owns its own tests.
 
-### 7. Move parameter/property declarations closer to their behavior
+### 8. Move parameter/property declarations closer to their behavior
 
 - **Files:** `nodes/OpenrouterLlm/OpenrouterLlm.node.ts` lines 50-825.
 - **Problem:** The large inline property declaration is shallow configuration in the same module as behavior. Related behavior, such as repair settings or provider routing, lives hundreds of lines away.
