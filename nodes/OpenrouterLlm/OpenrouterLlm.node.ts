@@ -13,7 +13,6 @@ import {
 	DEFAULT_REPAIR_REASONING_EFFORT,
 	DEFAULT_REPAIR_TEMPERATURE,
 	compileStructuredOutputSchema,
-	evaluateStructuredOutputWithRepair,
 	type StructuredOutputMode,
 	type StructuredValidationIssue,
 } from './StructuredOutputParser';
@@ -872,9 +871,16 @@ export class OpenrouterLlm implements INodeType {
 				validateRouting(this, modelVariant, provider, webPluginEnabled);
 				const headers = buildHeaders(this, itemIndex);
 
-				if (outputMode === 'text') {
+				{
 					const executionResult = await executeOpenRouter({
-						input: buildOpenRouterExecutionInput(this, itemIndex, provider),
+						input: buildOpenRouterExecutionInput(
+							this,
+							itemIndex,
+							provider,
+							outputMode,
+							compiledSchema,
+							maxRepairAttempts,
+						),
 						sendChat: async (body) => {
 							const response = (await this.helpers.httpRequestWithAuthentication.call(
 								this,
@@ -896,6 +902,15 @@ export class OpenrouterLlm implements INodeType {
 						},
 					});
 
+					if (executionResult.kind !== 'success') {
+						throw buildStructuredOutputError(this, itemIndex, 1 + executionResult.error.repairAttempts, {
+							errors: executionResult.error.validationErrors,
+							details: executionResult.error.validationDetails,
+							originalRawText: executionResult.error.originalRawText,
+							latestRepairText: executionResult.error.latestRepairText,
+						});
+					}
+
 					returnData.push({
 						json: executionResult.data,
 						pairedItem: { item: itemIndex },
@@ -903,122 +918,6 @@ export class OpenrouterLlm implements INodeType {
 					continue;
 				}
 
-				const initialBody = buildRequestBody(this, itemIndex, 1, outputMode, compiledSchema);
-
-				if (provider !== undefined) {
-					initialBody.provider = provider;
-				}
-
-				const initialResponse = (await this.helpers.httpRequestWithAuthentication.call(
-					this,
-					OPENROUTER_CUSTOM_CREDENTIAL_NAME,
-					{
-						method: 'POST',
-						baseURL: baseUrl,
-						url: '/chat/completions',
-						headers,
-						json: true,
-						body: initialBody,
-					},
-				)) as ChatCompletionResponse;
-				let lastResponse: ChatCompletionResponse | undefined = initialResponse;
-				let lastRawText = initialResponse.choices?.[0]?.message?.content ?? '';
-				let structured: unknown = null;
-				let repairAttemptsUsed = 0;
-
-				{
-					const repair = this.getNodeParameter('repair', itemIndex, {}) as IDataObject;
-					const repairModel = resolveModelLocator(
-						repair.model as ModelLocatorValue | undefined,
-						DEFAULT_REPAIR_MODEL,
-					);
-					const repairOutcome = await evaluateStructuredOutputWithRepair(
-						{
-							mode: outputMode,
-							compiledValidator: compiledSchema?.validator,
-							repair: {
-								maxAttempts: maxRepairAttempts,
-								model: repairModel,
-								temperature: isUnset(repair.temperature)
-									? DEFAULT_REPAIR_TEMPERATURE
-									: (repair.temperature as number),
-								reasoningEffort:
-									(repair.reasoningEffort as string | undefined) ?? DEFAULT_REPAIR_REASONING_EFFORT,
-								promptTemplate: repair.promptTemplate as string | undefined,
-								metadata: (attempt, model) => buildMetadata(this, itemIndex, model, attempt),
-								send: async (body) => {
-									const response = (await this.helpers.httpRequestWithAuthentication.call(
-										this,
-										OPENROUTER_CUSTOM_CREDENTIAL_NAME,
-										{
-											method: 'POST',
-											baseURL: baseUrl,
-											url: '/chat/completions',
-											headers,
-											json: true,
-											body,
-										},
-									)) as ChatCompletionResponse;
-
-									return {
-										response,
-										text: response.choices?.[0]?.message?.content ?? '',
-									};
-								},
-							},
-						},
-						lastRawText,
-						initialResponse,
-					);
-
-					if (!repairOutcome.ok) {
-						throw buildStructuredOutputError(
-							this,
-							itemIndex,
-							1 + repairOutcome.error.repair.repairAttempts,
-							{
-								errors: repairOutcome.error.validationErrors,
-								details: repairOutcome.error.validationDetails,
-								originalRawText: repairOutcome.error.originalRawText,
-								latestRepairText: repairOutcome.error.repair.latestRepairText,
-							},
-						);
-					}
-
-					lastResponse = repairOutcome.response as ChatCompletionResponse;
-					structured = repairOutcome.structured;
-					repairAttemptsUsed = repairOutcome.repair.repairAttempts;
-					lastRawText = repairAttemptsUsed > 0 ? JSON.stringify(structured) : repairOutcome.text;
-				}
-
-				const reasoningParams = this.getNodeParameter('reasoning', itemIndex, {}) as IDataObject;
-				if (reasoningParams.exclude === true && lastResponse?.choices) {
-					for (const choice of lastResponse.choices as Array<IDataObject>) {
-						const msg = choice.message as IDataObject | undefined;
-						if (msg) {
-							delete msg.reasoning;
-							delete msg.reasoning_content;
-						}
-					}
-				}
-
-				const outputJson: IDataObject = {
-					text: lastRawText,
-					structured: structured as IDataObject | null,
-					response: lastResponse,
-				};
-
-				if (repairAttemptsUsed > 0) {
-					outputJson.structuredOutputRepair = {
-						repaired: true,
-						repairAttempts: repairAttemptsUsed,
-					};
-				}
-
-				returnData.push({
-					json: outputJson,
-					pairedItem: { item: itemIndex },
-				});
 			} catch (error) {
 				if (this.continueOnFail()) {
 					const diagnosticFields = getStructuredOutputDiagnosticFields(error);
@@ -1061,6 +960,9 @@ function buildOpenRouterExecutionInput(
 	executeFunctions: IExecuteFunctions,
 	itemIndex: number,
 	provider: IDataObject | undefined,
+	outputMode: OutputMode,
+	compiledSchema: CompiledStructuredSchema | undefined,
+	maxRepairAttempts: number,
 ): OpenRouterExecutionInput {
 	const workflow = executeFunctions.getWorkflow();
 	const reasoning = buildReasoning(
@@ -1081,7 +983,7 @@ function buildOpenRouterExecutionInput(
 			fallbackModels: resolveFallbackModels(executeFunctions, itemIndex),
 		},
 		messages: buildMessages(executeFunctions, itemIndex),
-		outputMode: 'text',
+		outputMode,
 		sampling: buildSamplingInput(executeFunctions, itemIndex),
 		metadata: {
 			defaults: {
@@ -1102,6 +1004,48 @@ function buildOpenRouterExecutionInput(
 				((executeFunctions.getNodeParameter('reasoning', itemIndex, {}) as IDataObject).exclude as
 					| boolean
 					| undefined) === true,
+		},
+		structuredOutput: buildStructuredOutputExecutionConfig(
+			executeFunctions,
+			itemIndex,
+			outputMode,
+			compiledSchema,
+			maxRepairAttempts,
+		),
+	};
+}
+
+function buildStructuredOutputExecutionConfig(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+	outputMode: OutputMode,
+	compiledSchema: CompiledStructuredSchema | undefined,
+	maxRepairAttempts: number,
+): OpenRouterExecutionInput['structuredOutput'] {
+	if (outputMode === 'text') {
+		return undefined;
+	}
+
+	const repair = executeFunctions.getNodeParameter('repair', itemIndex, {}) as IDataObject;
+	const repairModel = resolveModelLocator(
+		repair.model as ModelLocatorValue | undefined,
+		DEFAULT_REPAIR_MODEL,
+	);
+
+	return {
+		mode: outputMode,
+		compiledValidator: compiledSchema?.validator,
+		responseFormat: compiledSchema?.responseFormat,
+		repair: {
+			maxAttempts: maxRepairAttempts,
+			model: repairModel,
+			temperature: isUnset(repair.temperature)
+				? DEFAULT_REPAIR_TEMPERATURE
+				: (repair.temperature as number),
+			reasoningEffort:
+				(repair.reasoningEffort as string | undefined) ?? DEFAULT_REPAIR_REASONING_EFFORT,
+			promptTemplate: repair.promptTemplate as string | undefined,
+			metadata: (attempt, model) => buildMetadata(executeFunctions, itemIndex, model, attempt),
 		},
 	};
 }
@@ -1207,122 +1151,6 @@ function buildPlugins(executeFunctions: IExecuteFunctions, itemIndex: number): I
 	return plugins;
 }
 
-function buildRequestBody(
-	executeFunctions: IExecuteFunctions,
-	itemIndex: number,
-	attempt: number = 1,
-	outputMode: OutputMode = 'text',
-	compiledSchema?: CompiledStructuredSchema,
-): IDataObject {
-	const modelPayload = buildModelPayload(executeFunctions, itemIndex);
-	const resolvedModel = resolveMetadataModel(modelPayload);
-	const body: IDataObject = {
-		...modelPayload,
-		messages: buildMessages(executeFunctions, itemIndex),
-	};
-
-	if (outputMode === 'json_object') {
-		body.response_format = { type: 'json_object' };
-	} else if (outputMode === 'json_schema' && compiledSchema !== undefined) {
-		body.response_format = {
-			type: 'json_schema',
-			json_schema: compiledSchema.responseFormat,
-		};
-	}
-	const generation = executeFunctions.getNodeParameter('generation', itemIndex, {}) as IDataObject;
-	const temperature = generation.temperature as number | string | undefined;
-	const maxTokens = generation.maxTokens as number | string | undefined;
-	const advancedSampling = executeFunctions.getNodeParameter(
-		'advancedSampling',
-		itemIndex,
-		{},
-	) as IDataObject;
-	const reasoning = buildReasoning(
-		executeFunctions,
-		executeFunctions.getNodeParameter('reasoning', itemIndex, {}) as IDataObject,
-	);
-	const integrations = executeFunctions.getNodeParameter(
-		'integrations',
-		itemIndex,
-		{},
-	) as IDataObject;
-	const responseHealing = (integrations.responseHealing as boolean | undefined) ?? false;
-	const sessionId = (integrations.sessionId as string | undefined) ?? '';
-	body.metadata = buildMetadata(executeFunctions, itemIndex, resolvedModel, attempt);
-
-	if (!isUnset(temperature)) {
-		body.temperature = temperature as number;
-	}
-
-	if (!isUnset(maxTokens)) {
-		body.max_tokens = validatePositiveNumber(executeFunctions, maxTokens, 'Max Tokens');
-	}
-
-	addOptionalNumber(body, 'top_p', generation.topP);
-	addOptionalNumber(body, 'frequency_penalty', generation.frequencyPenalty);
-	addOptionalNumber(body, 'presence_penalty', generation.presencePenalty);
-	addOptionalText(
-		executeFunctions,
-		body,
-		'prompt_cache_key',
-		generation.promptCacheKey,
-		'Prompt Cache Key',
-	);
-	addOptionalNumber(body, 'seed', generation.seed);
-
-	if (!isUnset(generation.stop)) {
-		body.stop = generation.stop as IDataObject['key'];
-	}
-
-	if (reasoning !== undefined) {
-		body.reasoning = reasoning;
-	}
-
-	if (!isUnset(advancedSampling.topK)) {
-		body.top_k = validatePositiveNumber(executeFunctions, advancedSampling.topK, 'Top K');
-	}
-
-	if (!isUnset(advancedSampling.repetitionPenalty)) {
-		body.repetition_penalty = validatePositiveNumber(
-			executeFunctions,
-			advancedSampling.repetitionPenalty,
-			'Repetition Penalty',
-		);
-	}
-
-	if (!isUnset(advancedSampling.minP)) {
-		body.min_p = validateRange(executeFunctions, advancedSampling.minP, 'Min P');
-	}
-
-	if (!isUnset(advancedSampling.topA)) {
-		body.top_a = validateRange(executeFunctions, advancedSampling.topA, 'Top A');
-	}
-
-	if (Array.isArray(advancedSampling.transforms) && advancedSampling.transforms.length > 0) {
-		body.transforms = advancedSampling.transforms;
-	}
-
-	const plugins: IDataObject[] = [];
-
-	if (responseHealing) {
-		plugins.push({ id: 'response-healing' });
-	}
-
-	const webPlugin = buildWebPlugin(executeFunctions, itemIndex);
-
-	if (webPlugin !== undefined) {
-		plugins.push(webPlugin);
-	}
-
-	if (plugins.length > 0) {
-		body.plugins = plugins;
-	}
-
-	addOptionalText(executeFunctions, body, 'session_id', sessionId, 'Session ID');
-
-	return body;
-}
-
 function buildHeaders(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
 	const headers: IDataObject = {};
 	const integrations = executeFunctions.getNodeParameter(
@@ -1420,31 +1248,6 @@ function buildMetadata(
 	return metadata;
 }
 
-function resolveMetadataModel(modelPayload: IDataObject): string {
-	if (typeof modelPayload.model === 'string') {
-		return modelPayload.model;
-	}
-
-	if (Array.isArray(modelPayload.models) && typeof modelPayload.models[0] === 'string') {
-		return modelPayload.models[0];
-	}
-
-	return '';
-}
-
-function buildModelPayload(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
-	const model = resolvePrimaryModel(executeFunctions, itemIndex);
-	const fallbackModels = resolveFallbackModels(executeFunctions, itemIndex);
-
-	if (fallbackModels.length > 0) {
-		return {
-			models: [model, ...fallbackModels],
-		};
-	}
-
-	return { model };
-}
-
 function buildReasoning(
 	executeFunctions: IExecuteFunctions,
 	reasoning: IDataObject,
@@ -1475,26 +1278,6 @@ function buildReasoning(
 	}
 
 	return output;
-}
-
-function addOptionalNumber(body: IDataObject, wireName: string, value: unknown): void {
-	if (!isUnset(value)) {
-		body[wireName] = value as number;
-	}
-}
-
-function addOptionalText(
-	executeFunctions: IExecuteFunctions,
-	body: IDataObject,
-	wireName: string,
-	value: unknown,
-	label: string,
-): void {
-	if (isUnset(value)) {
-		return;
-	}
-
-	body[wireName] = validateNonEmptyText(executeFunctions, value, label);
 }
 
 function validatePositiveNumber(

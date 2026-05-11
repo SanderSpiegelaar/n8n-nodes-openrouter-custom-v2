@@ -2,21 +2,61 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.executeOpenRouter = executeOpenRouter;
 exports.buildInitialRequestBody = buildInitialRequestBody;
+const StructuredOutputParser_1 = require("./StructuredOutputParser");
 async function executeOpenRouter({ input, sendChat, }) {
+    var _a;
     const requestBody = buildInitialRequestBody(input, 1);
     const { response, text } = await sendChat(requestBody);
     const finalResponse = applyReasoningExclusion(response, input.reasoning);
-    return {
-        kind: 'success',
-        data: {
-            text,
-            structured: null,
-            response: finalResponse,
-        },
+    if (input.outputMode === 'text') {
+        return {
+            kind: 'success',
+            data: {
+                text,
+                structured: null,
+                response: finalResponse,
+            },
+        };
+    }
+    const structuredOutput = (_a = input.structuredOutput) !== null && _a !== void 0 ? _a : { mode: input.outputMode };
+    const structuredOutcome = await (0, StructuredOutputParser_1.evaluateStructuredOutputWithRepair)({
+        ...structuredOutput,
+        repair: structuredOutput.repair === undefined
+            ? undefined
+            : {
+                ...structuredOutput.repair,
+                send: async (body) => sendChat(body),
+            },
+    }, text, finalResponse);
+    if (!structuredOutcome.ok) {
+        return {
+            kind: 'structured_output',
+            error: {
+                message: structuredOutcome.error.message,
+                validationErrors: structuredOutcome.error.validationErrors,
+                validationDetails: structuredOutcome.error.validationDetails,
+                originalRawText: structuredOutcome.error.originalRawText,
+                latestRepairText: structuredOutcome.error.repair.latestRepairText,
+                repairAttempts: structuredOutcome.error.repair.repairAttempts,
+            },
+        };
+    }
+    const structuredResponse = applyReasoningExclusion(structuredOutcome.response, input.reasoning);
+    const data = {
+        text: structuredOutcome.repair.repairAttempts > 0 ? JSON.stringify(structuredOutcome.structured) : structuredOutcome.text,
+        structured: structuredOutcome.structured,
+        response: structuredResponse,
     };
+    if (structuredOutcome.repair.repairAttempts > 0) {
+        data.structuredOutputRepair = {
+            repaired: true,
+            repairAttempts: structuredOutcome.repair.repairAttempts,
+        };
+    }
+    return { kind: 'success', data };
 }
 function buildInitialRequestBody(input, attempt) {
-    var _a;
+    var _a, _b;
     const body = {
         ...buildModelPayload(input.modelRouting),
         messages: input.messages,
@@ -26,7 +66,16 @@ function buildInitialRequestBody(input, attempt) {
         body.metadata = metadata;
     }
     addSampling(body, input.sampling);
-    if (((_a = input.reasoning) === null || _a === void 0 ? void 0 : _a.request) !== undefined) {
+    if (input.outputMode === 'json_object') {
+        body.response_format = { type: 'json_object' };
+    }
+    else if (input.outputMode === 'json_schema' && ((_a = input.structuredOutput) === null || _a === void 0 ? void 0 : _a.responseFormat) !== undefined) {
+        body.response_format = {
+            type: 'json_schema',
+            json_schema: input.structuredOutput.responseFormat,
+        };
+    }
+    if (((_b = input.reasoning) === null || _b === void 0 ? void 0 : _b.request) !== undefined) {
         body.reasoning = input.reasoning.request;
     }
     if (input.provider !== undefined) {

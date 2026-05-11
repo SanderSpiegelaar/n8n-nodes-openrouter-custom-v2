@@ -107,6 +107,58 @@ test('OpenRouter Execution public seam returns text success data and compatible 
 	});
 });
 
+test('OpenRouter Execution public seam validates JSON Object success data', async () => {
+	const { executeOpenRouter } = loadExecutionModule();
+	const requests = [];
+
+	const result = await executeOpenRouter({
+		input: {
+			modelRouting: { primaryModel: 'openai/gpt-4o-mini' },
+			messages: [{ role: 'user', content: 'Return JSON' }],
+			outputMode: 'json_object',
+			structuredOutput: { mode: 'json_object' },
+		},
+		sendChat: async (body) => {
+			requests.push(JSON.parse(JSON.stringify(body)));
+			return {
+				response: { id: 'gen-1', choices: [{ message: { content: '{"ok":true}' } }] },
+				text: '{"ok":true}',
+			};
+		},
+	});
+
+	assert.deepEqual(requests[0].response_format, { type: 'json_object' });
+	assert.deepEqual(result, {
+		kind: 'success',
+		data: {
+			text: '{"ok":true}',
+			structured: { ok: true },
+			response: { id: 'gen-1', choices: [{ message: { content: '{"ok":true}' } }] },
+		},
+	});
+});
+
+test('OpenRouter Execution public seam returns Structured Output failure data', async () => {
+	const { executeOpenRouter } = loadExecutionModule();
+
+	const result = await executeOpenRouter({
+		input: {
+			modelRouting: { primaryModel: 'openai/gpt-4o-mini' },
+			messages: [{ role: 'user', content: 'Return JSON' }],
+			outputMode: 'json_object',
+			structuredOutput: { mode: 'json_object' },
+		},
+		sendChat: async () => ({
+			response: { id: 'gen-1', choices: [{ message: { content: '[]' } }] },
+			text: '[]',
+		}),
+	});
+
+	assert.equal(result.kind, 'structured_output');
+	assert.equal(result.error.originalRawText, '[]');
+	assert.deepEqual(result.error.validationErrors, ['Response must be a non-null JSON object.']);
+});
+
 test('OpenRouter Execution sends a compatible initial chat completion request through the n8n adapter seam', async () => {
 	const node = loadNode();
 	const { context, requests } = createExecutionContext({

@@ -1,5 +1,11 @@
 import type { IDataObject } from 'n8n-workflow';
 
+import {
+	evaluateStructuredOutputWithRepair,
+	type StructuredOutputConfig,
+	type StructuredValidationIssue,
+} from './StructuredOutputParser';
+
 export type ChatMessage = {
 	role: 'system' | 'user' | 'assistant';
 	content: string;
@@ -69,13 +75,19 @@ export type ReasoningInput = {
 export type OpenRouterExecutionInput = {
 	modelRouting: ModelRoutingInput;
 	messages: ChatMessage[];
-	outputMode: 'text';
+	outputMode: 'text' | 'json_object' | 'json_schema';
 	sampling?: SamplingInput;
 	metadata?: MetadataContext;
 	provider?: OpenRouterCompatibleObject;
 	plugins?: OpenRouterCompatibleObject[];
 	sessionId?: string;
 	reasoning?: ReasoningInput;
+	structuredOutput?: StructuredOutputExecutionConfig;
+};
+
+export type StructuredOutputExecutionConfig = Omit<StructuredOutputConfig, 'repair'> & {
+	responseFormat?: OpenRouterCompatibleObject;
+	repair?: Omit<NonNullable<StructuredOutputConfig['repair']>, 'send'>;
 };
 
 export type OpenRouterExecutionSuccess = {
@@ -83,7 +95,23 @@ export type OpenRouterExecutionSuccess = {
 	data: IDataObject;
 };
 
-export type OpenRouterExecutionResult = OpenRouterExecutionSuccess;
+export type OpenRouterExecutionStructuredOutputFailure = {
+	kind: 'structured_output';
+	error: {
+		message: string;
+		validationErrors: string[];
+		validationDetails: StructuredOutputFailureDetails;
+		originalRawText: string;
+		latestRepairText: string;
+		repairAttempts: number;
+	};
+};
+
+type StructuredOutputFailureDetails = StructuredValidationIssue[];
+
+export type OpenRouterExecutionResult =
+	| OpenRouterExecutionSuccess
+	| OpenRouterExecutionStructuredOutputFailure;
 
 export async function executeOpenRouter({
 	input,
@@ -96,14 +124,65 @@ export async function executeOpenRouter({
 	const { response, text } = await sendChat(requestBody);
 	const finalResponse = applyReasoningExclusion(response, input.reasoning);
 
-	return {
-		kind: 'success',
-		data: {
-			text,
-			structured: null,
-			response: finalResponse,
+	if (input.outputMode === 'text') {
+		return {
+			kind: 'success',
+			data: {
+				text,
+				structured: null,
+				response: finalResponse,
+			},
+		};
+	}
+
+	const structuredOutput = input.structuredOutput ?? { mode: input.outputMode };
+	const structuredOutcome = await evaluateStructuredOutputWithRepair(
+		{
+			...structuredOutput,
+			repair:
+				structuredOutput.repair === undefined
+					? undefined
+					: {
+							...structuredOutput.repair,
+							send: async (body) => sendChat(body as unknown as ChatCompletionRequestBody),
+						},
 		},
+		text,
+		finalResponse,
+	);
+
+	if (!structuredOutcome.ok) {
+		return {
+			kind: 'structured_output',
+			error: {
+				message: structuredOutcome.error.message,
+				validationErrors: structuredOutcome.error.validationErrors,
+				validationDetails: structuredOutcome.error.validationDetails,
+				originalRawText: structuredOutcome.error.originalRawText,
+				latestRepairText: structuredOutcome.error.repair.latestRepairText,
+				repairAttempts: structuredOutcome.error.repair.repairAttempts,
+			},
+		};
+	}
+
+	const structuredResponse = applyReasoningExclusion(
+		structuredOutcome.response as ChatCompletionResponse,
+		input.reasoning,
+	);
+	const data: IDataObject = {
+		text: structuredOutcome.repair.repairAttempts > 0 ? JSON.stringify(structuredOutcome.structured) : structuredOutcome.text,
+		structured: structuredOutcome.structured as IDataObject,
+		response: structuredResponse,
 	};
+
+	if (structuredOutcome.repair.repairAttempts > 0) {
+		data.structuredOutputRepair = {
+			repaired: true,
+			repairAttempts: structuredOutcome.repair.repairAttempts,
+		};
+	}
+
+	return { kind: 'success', data };
 }
 
 export function buildInitialRequestBody(
@@ -121,6 +200,15 @@ export function buildInitialRequestBody(
 	}
 
 	addSampling(body, input.sampling);
+
+	if (input.outputMode === 'json_object') {
+		body.response_format = { type: 'json_object' };
+	} else if (input.outputMode === 'json_schema' && input.structuredOutput?.responseFormat !== undefined) {
+		body.response_format = {
+			type: 'json_schema',
+			json_schema: input.structuredOutput.responseFormat,
+		};
+	}
 
 	if (input.reasoning?.request !== undefined) {
 		body.reasoning = input.reasoning.request;

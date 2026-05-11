@@ -1,4 +1,5 @@
 import type { IDataObject } from 'n8n-workflow';
+import { type StructuredOutputConfig, type StructuredValidationIssue } from './StructuredOutputParser';
 export type ChatMessage = {
     role: 'system' | 'user' | 'assistant';
     content: string;
@@ -59,21 +60,39 @@ export type ReasoningInput = {
 export type OpenRouterExecutionInput = {
     modelRouting: ModelRoutingInput;
     messages: ChatMessage[];
-    outputMode: 'text';
+    outputMode: 'text' | 'json_object' | 'json_schema';
     sampling?: SamplingInput;
     metadata?: MetadataContext;
     provider?: OpenRouterCompatibleObject;
     plugins?: OpenRouterCompatibleObject[];
     sessionId?: string;
     reasoning?: ReasoningInput;
+    structuredOutput?: StructuredOutputExecutionConfig;
+};
+export type StructuredOutputExecutionConfig = Omit<StructuredOutputConfig, 'repair'> & {
+    responseFormat?: OpenRouterCompatibleObject;
+    repair?: Omit<NonNullable<StructuredOutputConfig['repair']>, 'send'>;
 };
 export type OpenRouterExecutionSuccess = {
     kind: 'success';
     data: IDataObject;
 };
-export type OpenRouterExecutionResult = OpenRouterExecutionSuccess;
+export type OpenRouterExecutionStructuredOutputFailure = {
+    kind: 'structured_output';
+    error: {
+        message: string;
+        validationErrors: string[];
+        validationDetails: StructuredOutputFailureDetails;
+        originalRawText: string;
+        latestRepairText: string;
+        repairAttempts: number;
+    };
+};
+type StructuredOutputFailureDetails = StructuredValidationIssue[];
+export type OpenRouterExecutionResult = OpenRouterExecutionSuccess | OpenRouterExecutionStructuredOutputFailure;
 export declare function executeOpenRouter({ input, sendChat, }: {
     input: OpenRouterExecutionInput;
     sendChat: OpenRouterChatSender;
 }): Promise<OpenRouterExecutionResult>;
 export declare function buildInitialRequestBody(input: OpenRouterExecutionInput, attempt: number): ChatCompletionRequestBody;
+export {};
