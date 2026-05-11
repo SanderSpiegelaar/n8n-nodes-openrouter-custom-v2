@@ -1,0 +1,3 @@
+# Split OpenRouter Execution from the n8n adapter module
+
+OpenRouter Execution will live behind a runtime orchestration boundary rather than inside `OpenrouterLlm.node.ts`. The n8n adapter module owns Node Parameter Surface reads, credentials, n8n HTTP helper usage, Continue On Fail behavior, and final n8n item/error shaping; OpenRouter Execution owns request-body construction from normalized input, chat sender callback invocation, Structured Output handoff, reasoning response post-processing, and workflow-ready success/failure data. This preserves workflow-visible behavior while making the highest-change execution path testable without a mocked n8n runtime.
