@@ -1,6 +1,6 @@
 {
-    "name": "n8n-nodes-openrouter-custom-v2",
-    "version": "0.1.4",
+    "name": "n8n-nodes-openrouter-custom",
+    "version": "0.1.5",
     "description": "n8n community node for sending chat completion requests through OpenRouter.",
     "license": "MIT",
     "homepage": "",
@@ -12,7 +12,7 @@
     ],
     "author": {
         "name": "Sander Spiegelaar",
-        "email": "sanderspiegelaar@gmail.com"
+        "email": "dev@sander.gg"
     },
     "repository": {
         "type": "git",

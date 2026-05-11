@@ -9,8 +9,12 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
-import Ajv, { type ValidateFunction, type ErrorObject } from 'ajv';
-import addFormats from 'ajv-formats';
+import type { ValidateFunction } from 'ajv';
+import {
+	compileStructuredOutputSchema,
+	validateStructuredOutput,
+	type StructuredOutputMode,
+} from './StructuredOutputParser';
 
 type ChatCompletionResponse = IDataObject & {
 	choices?: Array<{
@@ -873,7 +877,7 @@ export class OpenrouterLlm implements INodeType {
 						break;
 					}
 
-					const validation = validateStructuredResponse(outputMode, lastRawText, compiledValidator);
+					const validation = validateStructuredOutput(outputMode, lastRawText, compiledValidator);
 
 					if (validation.ok) {
 						structured = validation.value;
@@ -1514,13 +1518,7 @@ function buildProvider(
 	return Object.keys(provider).length === 0 ? undefined : provider;
 }
 
-type OutputMode = 'text' | 'json_object' | 'json_schema';
-
-const ajvInstance = (() => {
-	const ajv = new Ajv({ allErrors: true, strict: false });
-	addFormats(ajv);
-	return ajv;
-})();
+type OutputMode = StructuredOutputMode;
 
 function compileSchema(executeFunctions: IExecuteFunctions, itemIndex: number): ValidateFunction {
 	const raw = executeFunctions.getNodeParameter('jsonSchema', itemIndex) as unknown;
@@ -1538,7 +1536,7 @@ function compileSchema(executeFunctions: IExecuteFunctions, itemIndex: number): 
 	}
 
 	try {
-		return ajvInstance.compile(parsed as object);
+		return compileStructuredOutputSchema(parsed);
 	} catch (error) {
 		throw new NodeOperationError(
 			executeFunctions.getNode(),
@@ -1547,43 +1545,6 @@ function compileSchema(executeFunctions: IExecuteFunctions, itemIndex: number): 
 	}
 }
 
-type ValidationResult = { ok: true; value: unknown } | { ok: false; errors: string[] };
-
-function validateStructuredResponse(
-	mode: OutputMode,
-	rawText: string,
-	compiledValidator: ValidateFunction | undefined,
-): ValidationResult {
-	let parsed: unknown;
-
-	try {
-		parsed = JSON.parse(rawText);
-	} catch (error) {
-		return { ok: false, errors: [error instanceof Error ? error.message : String(error)] };
-	}
-
-	if (mode === 'json_object') {
-		if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-			return { ok: false, errors: ['Response must be a non-null JSON object.'] };
-		}
-		return { ok: true, value: parsed };
-	}
-
-	if (mode === 'json_schema' && compiledValidator !== undefined) {
-		if (compiledValidator(parsed)) {
-			return { ok: true, value: parsed };
-		}
-		const errors = (compiledValidator.errors ?? []).map(formatAjvError);
-		return { ok: false, errors };
-	}
-
-	return { ok: true, value: parsed };
-}
-
-function formatAjvError(error: ErrorObject): string {
-	const path = error.instancePath ?? '';
-	return path === '' ? (error.message ?? 'invalid') : `${path} ${error.message ?? 'invalid'}`;
-}
 
 function buildCorrectiveMessage(errors: string[]): string {
 	const top = errors

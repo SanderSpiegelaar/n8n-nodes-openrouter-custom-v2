@@ -1,12 +1,8 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpenrouterLlm = void 0;
 const n8n_workflow_1 = require("n8n-workflow");
-const ajv_1 = __importDefault(require("ajv"));
-const ajv_formats_1 = __importDefault(require("ajv-formats"));
+const StructuredOutputParser_1 = require("./StructuredOutputParser");
 const VALID_MESSAGE_ROLES = ['system', 'user', 'assistant'];
 const SUPPORTED_MODEL_VARIANTS = [
     ':exacto',
@@ -818,7 +814,7 @@ class OpenrouterLlm {
                         structured = null;
                         break;
                     }
-                    const validation = validateStructuredResponse(outputMode, lastRawText, compiledValidator);
+                    const validation = (0, StructuredOutputParser_1.validateStructuredOutput)(outputMode, lastRawText, compiledValidator);
                     if (validation.ok) {
                         structured = validation.value;
                         break;
@@ -1212,11 +1208,6 @@ function buildProvider(executeFunctions, itemIndex, outputMode = 'text') {
     }
     return Object.keys(provider).length === 0 ? undefined : provider;
 }
-const ajvInstance = (() => {
-    const ajv = new ajv_1.default({ allErrors: true, strict: false });
-    (0, ajv_formats_1.default)(ajv);
-    return ajv;
-})();
 function compileSchema(executeFunctions, itemIndex) {
     const raw = executeFunctions.getNodeParameter('jsonSchema', itemIndex);
     let parsed = raw;
@@ -1229,40 +1220,11 @@ function compileSchema(executeFunctions, itemIndex) {
         }
     }
     try {
-        return ajvInstance.compile(parsed);
+        return (0, StructuredOutputParser_1.compileStructuredOutputSchema)(parsed);
     }
     catch (error) {
         throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `JSON Schema compile failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-}
-function validateStructuredResponse(mode, rawText, compiledValidator) {
-    var _a;
-    let parsed;
-    try {
-        parsed = JSON.parse(rawText);
-    }
-    catch (error) {
-        return { ok: false, errors: [error instanceof Error ? error.message : String(error)] };
-    }
-    if (mode === 'json_object') {
-        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            return { ok: false, errors: ['Response must be a non-null JSON object.'] };
-        }
-        return { ok: true, value: parsed };
-    }
-    if (mode === 'json_schema' && compiledValidator !== undefined) {
-        if (compiledValidator(parsed)) {
-            return { ok: true, value: parsed };
-        }
-        const errors = ((_a = compiledValidator.errors) !== null && _a !== void 0 ? _a : []).map(formatAjvError);
-        return { ok: false, errors };
-    }
-    return { ok: true, value: parsed };
-}
-function formatAjvError(error) {
-    var _a, _b, _c;
-    const path = (_a = error.instancePath) !== null && _a !== void 0 ? _a : '';
-    return path === '' ? ((_b = error.message) !== null && _b !== void 0 ? _b : 'invalid') : `${path} ${(_c = error.message) !== null && _c !== void 0 ? _c : 'invalid'}`;
 }
 function buildCorrectiveMessage(errors) {
     const top = errors

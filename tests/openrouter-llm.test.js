@@ -793,6 +793,41 @@ test('Openrouter LLM in json_object mode sends response_format and returns parse
 	assert.equal(requests[0].body.metadata.validation_attempt, 1);
 });
 
+test('structured parser extracts raw, fenced, and prose-embedded JSON values', () => {
+	const {
+		extractStructuredJson,
+	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
+
+	assert.deepEqual(extractStructuredJson('{"answer":42}'), { ok: true, value: { answer: 42 } });
+	assert.deepEqual(extractStructuredJson('```json\n{"answer":42}\n```'), {
+		ok: true,
+		value: { answer: 42 },
+	});
+	assert.deepEqual(extractStructuredJson('Here is the answer: {"answer":42}. Thanks.'), {
+		ok: true,
+		value: { answer: 42 },
+	});
+});
+
+test('structured parser unwraps unambiguous n8n-style wrappers only', () => {
+	const {
+		validateStructuredOutput,
+	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
+
+	assert.deepEqual(validateStructuredOutput('json_object', '{"json":{"answer":42}}'), {
+		ok: true,
+		value: { answer: 42 },
+	});
+	assert.deepEqual(validateStructuredOutput('json_object', '{"json":{"structured":{"answer":42}}}'), {
+		ok: true,
+		value: { answer: 42 },
+	});
+	assert.deepEqual(validateStructuredOutput('json_object', '{"json":{"answer":42},"pairedItem":0}'), {
+		ok: true,
+		value: { json: { answer: 42 }, pairedItem: 0 },
+	});
+});
+
 test('Openrouter LLM in json_object mode rejects array and primitive responses after exhausting retries', async () => {
 	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
 	const node = new OpenrouterLlm();
@@ -884,6 +919,61 @@ test('Openrouter LLM in json_schema mode sends strict json_schema response_forma
 		json_schema: { name: 'response', schema, strict: true },
 	});
 	assert.deepEqual(result[0][0].json.structured, { email: 'a@b.co' });
+});
+
+test('Openrouter LLM in json_schema mode allows array roots when schema allows arrays', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const schema = { type: 'array', items: { type: 'number' } };
+	const { context } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			generation: { temperature: 0.2, maxTokens: 100 },
+			outputMode: 'json_schema',
+			jsonSchema: JSON.stringify(schema),
+		},
+		{
+			responder: () => ({
+				id: 'gen-1',
+				choices: [{ message: { role: 'assistant', content: '[1,2,3]' } }],
+			}),
+		},
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.deepEqual(result[0][0].json.structured, [1, 2, 3]);
+});
+
+test('Openrouter LLM validates without inserting defaults or removing additional properties', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const schema = {
+		type: 'object',
+		properties: { answer: { type: 'number', default: 42 } },
+		additionalProperties: false,
+	};
+	const { context } = createExecutionContext(
+		{
+			model: 'openai/gpt-4o-mini',
+			prompt: 'Hello',
+			generation: { temperature: 0.2, maxTokens: 100 },
+			outputMode: 'json_schema',
+			jsonSchema: JSON.stringify(schema),
+		},
+		{
+			continueOnFail: true,
+			responder: () => ({
+				id: 'gen-1',
+				choices: [{ message: { role: 'assistant', content: '{"extra":true}' } }],
+			}),
+		},
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.match(result[0][0].json.error, /additional properties/i);
 });
 
 test('Openrouter LLM retries once with a corrective system message and succeeds on the second attempt', async () => {

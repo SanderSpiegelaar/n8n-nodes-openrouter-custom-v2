@@ -1,4 +1,4 @@
-# n8n-nodes-openrouter-custom-v2
+# n8n-nodes-openrouter-custom
 
 [n8n](https://n8n.io/) community package that adds an **Openrouter LLM** node for chat completions via [OpenRouter](https://openrouter.ai/) — one HTTP API to route prompts to many hosted models.
 
@@ -25,7 +25,6 @@
 - **Structured output** — Optional JSON Schema with AJV validation and retry behaviour for reliable machine-readable results.
 - **Provider routing** — Allow/deny providers, sort order, and related OpenRouter routing fields.
 - **Integrations** — Custom headers, metadata, Langfuse trace ID, web search–related options where applicable.
-- **AI tools** — Node is marked usable as an n8n AI tool (`usableAsTool`).
 
 ## Installation
 
