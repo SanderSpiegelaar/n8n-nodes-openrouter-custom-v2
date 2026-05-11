@@ -1,10 +1,7 @@
 import type {
 	IDataObject,
 	IExecuteFunctions,
-	ILoadOptionsFunctions,
-	INodeListSearchResult,
 	INodeExecutionData,
-	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
@@ -19,6 +16,10 @@ import {
 	type StructuredOutputMode,
 	type StructuredValidationIssue,
 } from './StructuredOutputParser';
+import {
+	loadOpenRouterModelCatalogOptions,
+	searchOpenRouterModelCatalog,
+} from './OpenRouterModelCatalog';
 
 type ChatCompletionResponse = IDataObject & {
 	choices?: Array<{
@@ -824,72 +825,10 @@ export class OpenrouterLlm implements INodeType {
 
 	methods = {
 		listSearch: {
-			async getOpenRouterModels(
-				this: ILoadOptionsFunctions,
-				filter?: string,
-			): Promise<INodeListSearchResult> {
-				const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
-				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
-				const response = (await this.helpers.httpRequestWithAuthentication.call(
-					this,
-					OPENROUTER_CUSTOM_CREDENTIAL_NAME,
-					{
-						method: 'GET',
-						baseURL: baseUrl,
-						url: '/models',
-						json: true,
-					},
-				)) as { data?: OpenRouterModel[] };
-				const normalizedFilter = filter?.toLowerCase() ?? '';
-
-				const results = (response.data ?? [])
-					.filter((model) => isTextModel(model))
-					.filter((model) => model.id !== 'openrouter/auto')
-					.filter((model) => {
-						if (normalizedFilter === '') {
-							return true;
-						}
-
-						return (
-							model.id.toLowerCase().includes(normalizedFilter) ||
-							(model.name ?? '').toLowerCase().includes(normalizedFilter)
-						);
-					})
-					.map((model) => ({
-						name: model.id,
-						value: model.id,
-					}))
-					.sort((a, b) => a.value.localeCompare(b.value));
-
-				return { results };
-			},
+			getOpenRouterModels: searchOpenRouterModelCatalog,
 		},
 		loadOptions: {
-			async getOpenRouterModelOptions(
-				this: ILoadOptionsFunctions,
-			): Promise<INodePropertyOptions[]> {
-				const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
-				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
-				const response = (await this.helpers.httpRequestWithAuthentication.call(
-					this,
-					OPENROUTER_CUSTOM_CREDENTIAL_NAME,
-					{
-						method: 'GET',
-						baseURL: baseUrl,
-						url: '/models',
-						json: true,
-					},
-				)) as { data?: OpenRouterModel[] };
-
-				return (response.data ?? [])
-					.filter((model) => isTextModel(model))
-					.filter((model) => model.id !== 'openrouter/auto')
-					.map((model) => ({
-						name: model.id,
-						value: model.id,
-					}))
-					.sort((a, b) => a.value.localeCompare(b.value));
-			},
+			getOpenRouterModelOptions: loadOpenRouterModelCatalogOptions,
 		},
 	};
 
@@ -1059,14 +998,6 @@ export class OpenrouterLlm implements INodeType {
 		return [returnData];
 	}
 }
-
-type OpenRouterModel = {
-	id: string;
-	name?: string;
-	architecture?: {
-		output_modalities?: string[];
-	};
-};
 
 type ModelLocatorValue =
 	| string
@@ -1455,12 +1386,6 @@ function stripSupportedVariant(modelId: string): string {
 	}
 
 	return modelId.slice(0, -supportedVariant.length);
-}
-
-function isTextModel(model: OpenRouterModel): boolean {
-	const outputModalities = model.architecture?.output_modalities;
-
-	return outputModalities === undefined || outputModalities.includes('text');
 }
 
 function buildMessages(executeFunctions: IExecuteFunctions, itemIndex: number): ChatMessage[] {

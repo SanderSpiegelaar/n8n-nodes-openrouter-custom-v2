@@ -1,12 +1,13 @@
-import type { IExecuteFunctions, ILoadOptionsFunctions, INodeListSearchResult, INodeExecutionData, INodePropertyOptions, INodeType, INodeTypeDescription } from 'n8n-workflow';
+import type { IExecuteFunctions, INodeExecutionData, INodeType, INodeTypeDescription } from 'n8n-workflow';
+import { loadOpenRouterModelCatalogOptions, searchOpenRouterModelCatalog } from './OpenRouterModelCatalog';
 export declare class OpenrouterLlm implements INodeType {
     description: INodeTypeDescription;
     methods: {
         listSearch: {
-            getOpenRouterModels(this: ILoadOptionsFunctions, filter?: string): Promise<INodeListSearchResult>;
+            getOpenRouterModels: typeof searchOpenRouterModelCatalog;
         };
         loadOptions: {
-            getOpenRouterModelOptions(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]>;
+            getOpenRouterModelOptions: typeof loadOpenRouterModelCatalogOptions;
         };
     };
     execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]>;

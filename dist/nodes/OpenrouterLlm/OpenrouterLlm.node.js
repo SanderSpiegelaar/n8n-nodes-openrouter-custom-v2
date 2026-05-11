@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpenrouterLlm = void 0;
 const n8n_workflow_1 = require("n8n-workflow");
 const StructuredOutputParser_1 = require("./StructuredOutputParser");
+const OpenRouterModelCatalog_1 = require("./OpenRouterModelCatalog");
 const VALID_MESSAGE_ROLES = ['system', 'user', 'assistant'];
 const SUPPORTED_MODEL_VARIANTS = [
     ':exacto',
@@ -785,56 +786,10 @@ class OpenrouterLlm {
         };
         this.methods = {
             listSearch: {
-                async getOpenRouterModels(filter) {
-                    var _a, _b;
-                    const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
-                    const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
-                    const response = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
-                        method: 'GET',
-                        baseURL: baseUrl,
-                        url: '/models',
-                        json: true,
-                    }));
-                    const normalizedFilter = (_a = filter === null || filter === void 0 ? void 0 : filter.toLowerCase()) !== null && _a !== void 0 ? _a : '';
-                    const results = ((_b = response.data) !== null && _b !== void 0 ? _b : [])
-                        .filter((model) => isTextModel(model))
-                        .filter((model) => model.id !== 'openrouter/auto')
-                        .filter((model) => {
-                        var _a;
-                        if (normalizedFilter === '') {
-                            return true;
-                        }
-                        return (model.id.toLowerCase().includes(normalizedFilter) ||
-                            ((_a = model.name) !== null && _a !== void 0 ? _a : '').toLowerCase().includes(normalizedFilter));
-                    })
-                        .map((model) => ({
-                        name: model.id,
-                        value: model.id,
-                    }))
-                        .sort((a, b) => a.value.localeCompare(b.value));
-                    return { results };
-                },
+                getOpenRouterModels: OpenRouterModelCatalog_1.searchOpenRouterModelCatalog,
             },
             loadOptions: {
-                async getOpenRouterModelOptions() {
-                    var _a;
-                    const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
-                    const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
-                    const response = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
-                        method: 'GET',
-                        baseURL: baseUrl,
-                        url: '/models',
-                        json: true,
-                    }));
-                    return ((_a = response.data) !== null && _a !== void 0 ? _a : [])
-                        .filter((model) => isTextModel(model))
-                        .filter((model) => model.id !== 'openrouter/auto')
-                        .map((model) => ({
-                        name: model.id,
-                        value: model.id,
-                    }))
-                        .sort((a, b) => a.value.localeCompare(b.value));
-                },
+                getOpenRouterModelOptions: OpenRouterModelCatalog_1.loadOpenRouterModelCatalogOptions,
             },
         };
     }
@@ -1207,11 +1162,6 @@ function stripSupportedVariant(modelId) {
         return modelId;
     }
     return modelId.slice(0, -supportedVariant.length);
-}
-function isTextModel(model) {
-    var _a;
-    const outputModalities = (_a = model.architecture) === null || _a === void 0 ? void 0 : _a.output_modalities;
-    return outputModalities === undefined || outputModalities.includes('text');
 }
 function buildMessages(executeFunctions, itemIndex) {
     const promptMode = executeFunctions.getNodeParameter('promptMode', itemIndex, 'systemUser');

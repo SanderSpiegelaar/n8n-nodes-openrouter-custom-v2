@@ -284,6 +284,61 @@ test('Openrouter LLM sends fallback chains with models and no model field', asyn
 	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'model'), false);
 });
 
+test('OpenRouter model catalog loads shared sorted text model options for lists and search', async () => {
+	const {
+		loadOpenRouterModelCatalogOptions,
+		searchOpenRouterModelCatalog,
+	} = require('../dist/nodes/OpenrouterLlm/OpenRouterModelCatalog.js');
+	const requests = [];
+	const context = {
+		getCredentials: async () => ({ baseUrl: 'https://openrouter.ai/api/v1///' }),
+		helpers: {
+			httpRequestWithAuthentication: async (_credentialType, requestOptions) => {
+				requests.push(requestOptions);
+				return {
+					data: [
+						{
+							id: 'z/provider-model',
+							name: 'Provider Model',
+							architecture: { output_modalities: ['text'] },
+						},
+						{
+							id: 'image/model',
+							name: 'Image Model',
+							architecture: { output_modalities: ['image'] },
+						},
+						{
+							id: 'openrouter/auto',
+							name: 'Auto Router',
+							architecture: { output_modalities: ['text'] },
+						},
+						{
+							id: 'anthropic/claude-3-haiku',
+							name: 'Claude 3 Haiku',
+							architecture: { output_modalities: ['text'] },
+						},
+					],
+				};
+			},
+		},
+	};
+
+	const options = await loadOpenRouterModelCatalogOptions.call(context);
+	const searchResult = await searchOpenRouterModelCatalog.call(context, 'CLAUDE');
+
+	assert.equal(requests.length, 2);
+	assert.equal(requests[0].method, 'GET');
+	assert.equal(requests[0].baseURL, 'https://openrouter.ai/api/v1');
+	assert.equal(requests[0].url, '/models');
+	assert.deepEqual(options, [
+		{ name: 'anthropic/claude-3-haiku', value: 'anthropic/claude-3-haiku' },
+		{ name: 'z/provider-model', value: 'z/provider-model' },
+	]);
+	assert.deepEqual(searchResult.results, [
+		{ name: 'anthropic/claude-3-haiku', value: 'anthropic/claude-3-haiku' },
+	]);
+});
+
 test('Openrouter LLM loads searchable text model options from OpenRouter', async () => {
 	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
 	const node = new OpenrouterLlm();
