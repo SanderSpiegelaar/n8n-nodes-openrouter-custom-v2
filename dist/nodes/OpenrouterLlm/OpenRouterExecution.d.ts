@@ -1,11 +1,10 @@
-import type { IDataObject } from 'n8n-workflow';
 import { type StructuredOutputConfig, type StructuredValidationIssue } from './StructuredOutputParser';
 export type ChatMessage = {
     role: 'system' | 'user' | 'assistant';
     content: string;
 };
 export type OpenRouterCompatibleObject = Record<string, unknown>;
-export type ChatCompletionResponse = IDataObject & {
+export type ChatCompletionResponse = OpenRouterCompatibleObject & {
     choices?: Array<{
         message?: {
             content?: string;
@@ -73,9 +72,10 @@ export type StructuredOutputExecutionConfig = Omit<StructuredOutputConfig, 'repa
     responseFormat?: OpenRouterCompatibleObject;
     repair?: Omit<NonNullable<StructuredOutputConfig['repair']>, 'send'>;
 };
+export type OpenRouterExecutionData = Record<string, unknown>;
 export type OpenRouterExecutionSuccess = {
     kind: 'success';
-    data: IDataObject;
+    data: OpenRouterExecutionData;
 };
 export type OpenRouterExecutionStructuredOutputFailure = {
     kind: 'structured_output';

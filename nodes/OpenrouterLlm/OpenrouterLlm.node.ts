@@ -912,7 +912,7 @@ export class OpenrouterLlm implements INodeType {
 					}
 
 					returnData.push({
-						json: executionResult.data,
+						json: executionResult.data as IDataObject,
 						pairedItem: { item: itemIndex },
 					});
 					continue;

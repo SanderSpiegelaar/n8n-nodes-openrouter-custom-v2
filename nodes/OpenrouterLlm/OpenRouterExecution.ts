@@ -1,5 +1,3 @@
-import type { IDataObject } from 'n8n-workflow';
-
 import {
 	evaluateStructuredOutputWithRepair,
 	type StructuredOutputConfig,
@@ -13,7 +11,7 @@ export type ChatMessage = {
 
 export type OpenRouterCompatibleObject = Record<string, unknown>;
 
-export type ChatCompletionResponse = IDataObject & {
+export type ChatCompletionResponse = OpenRouterCompatibleObject & {
 	choices?: Array<{
 		message?: {
 			content?: string;
@@ -90,9 +88,11 @@ export type StructuredOutputExecutionConfig = Omit<StructuredOutputConfig, 'repa
 	repair?: Omit<NonNullable<StructuredOutputConfig['repair']>, 'send'>;
 };
 
+export type OpenRouterExecutionData = Record<string, unknown>;
+
 export type OpenRouterExecutionSuccess = {
 	kind: 'success';
-	data: IDataObject;
+	data: OpenRouterExecutionData;
 };
 
 export type OpenRouterExecutionStructuredOutputFailure = {
@@ -169,9 +169,9 @@ export async function executeOpenRouter({
 		structuredOutcome.response as ChatCompletionResponse,
 		input.reasoning,
 	);
-	const data: IDataObject = {
+	const data: OpenRouterExecutionData = {
 		text: structuredOutcome.repair.repairAttempts > 0 ? JSON.stringify(structuredOutcome.structured) : structuredOutcome.text,
-		structured: structuredOutcome.structured as IDataObject,
+		structured: structuredOutcome.structured,
 		response: structuredResponse,
 	};
 
