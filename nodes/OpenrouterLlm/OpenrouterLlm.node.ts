@@ -21,6 +21,7 @@ import {
 	loadOpenRouterModelCatalogOptions,
 	searchOpenRouterModelCatalog,
 } from './OpenRouterModelCatalog';
+import { executeOpenRouter, type OpenRouterExecutionInput } from './OpenRouterExecution';
 
 type ChatCompletionResponse = IDataObject & {
 	choices?: Array<{
@@ -871,6 +872,37 @@ export class OpenrouterLlm implements INodeType {
 				validateRouting(this, modelVariant, provider, webPluginEnabled);
 				const headers = buildHeaders(this, itemIndex);
 
+				if (outputMode === 'text') {
+					const executionResult = await executeOpenRouter({
+						input: buildOpenRouterExecutionInput(this, itemIndex, provider),
+						sendChat: async (body) => {
+							const response = (await this.helpers.httpRequestWithAuthentication.call(
+								this,
+								OPENROUTER_CUSTOM_CREDENTIAL_NAME,
+								{
+									method: 'POST',
+									baseURL: baseUrl,
+									url: '/chat/completions',
+									headers,
+									json: true,
+									body,
+								},
+							)) as ChatCompletionResponse;
+
+							return {
+								response,
+								text: response.choices?.[0]?.message?.content ?? '',
+							};
+						},
+					});
+
+					returnData.push({
+						json: executionResult.data,
+						pairedItem: { item: itemIndex },
+					});
+					continue;
+				}
+
 				const initialBody = buildRequestBody(this, itemIndex, 1, outputMode, compiledSchema);
 
 				if (provider !== undefined) {
@@ -894,9 +926,7 @@ export class OpenrouterLlm implements INodeType {
 				let structured: unknown = null;
 				let repairAttemptsUsed = 0;
 
-				if (outputMode === 'text') {
-					structured = null;
-				} else {
+				{
 					const repair = this.getNodeParameter('repair', itemIndex, {}) as IDataObject;
 					const repairModel = resolveModelLocator(
 						repair.model as ModelLocatorValue | undefined,
@@ -1026,6 +1056,156 @@ type ModelLocatorValue =
 	| {
 			value?: string;
 	  };
+
+function buildOpenRouterExecutionInput(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+	provider: IDataObject | undefined,
+): OpenRouterExecutionInput {
+	const workflow = executeFunctions.getWorkflow();
+	const reasoning = buildReasoning(
+		executeFunctions,
+		executeFunctions.getNodeParameter('reasoning', itemIndex, {}) as IDataObject,
+	);
+	const integrations = executeFunctions.getNodeParameter(
+		'integrations',
+		itemIndex,
+		{},
+	) as IDataObject;
+	const sessionId = (integrations.sessionId as string | undefined) ?? '';
+	const primaryModel = resolvePrimaryModel(executeFunctions, itemIndex);
+
+	return {
+		modelRouting: {
+			primaryModel,
+			fallbackModels: resolveFallbackModels(executeFunctions, itemIndex),
+		},
+		messages: buildMessages(executeFunctions, itemIndex),
+		outputMode: 'text',
+		sampling: buildSamplingInput(executeFunctions, itemIndex),
+		metadata: {
+			defaults: {
+				executionId: executeFunctions.getExecutionId(),
+				workflowId: workflow.id ?? '',
+				workflowName: workflow.name ?? '',
+				nodeName: executeFunctions.getNode().name,
+				itemIndex,
+			},
+			extras: buildMetadataExtras(executeFunctions, itemIndex),
+		},
+		provider: provider as OpenRouterExecutionInput['provider'],
+		plugins: buildPlugins(executeFunctions, itemIndex) as OpenRouterExecutionInput['plugins'],
+		sessionId,
+		reasoning: {
+			request: reasoning,
+			excludeFromResponse:
+				((executeFunctions.getNodeParameter('reasoning', itemIndex, {}) as IDataObject).exclude as
+					| boolean
+					| undefined) === true,
+		},
+	};
+}
+
+function buildSamplingInput(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+): OpenRouterExecutionInput['sampling'] {
+	const generation = executeFunctions.getNodeParameter('generation', itemIndex, {}) as IDataObject;
+	const advancedSampling = executeFunctions.getNodeParameter(
+		'advancedSampling',
+		itemIndex,
+		{},
+	) as IDataObject;
+
+	return {
+		temperature: isUnset(generation.temperature) ? undefined : (generation.temperature as number),
+		maxTokens: isUnset(generation.maxTokens)
+			? undefined
+			: validatePositiveNumber(executeFunctions, generation.maxTokens, 'Max Tokens'),
+		topP: isUnset(generation.topP) ? undefined : (generation.topP as number),
+		frequencyPenalty: isUnset(generation.frequencyPenalty)
+			? undefined
+			: (generation.frequencyPenalty as number),
+		presencePenalty: isUnset(generation.presencePenalty)
+			? undefined
+			: (generation.presencePenalty as number),
+		promptCacheKey: isUnset(generation.promptCacheKey)
+			? undefined
+			: validateNonEmptyText(executeFunctions, generation.promptCacheKey, 'Prompt Cache Key'),
+		seed: isUnset(generation.seed) ? undefined : (generation.seed as number),
+		stop: isUnset(generation.stop) ? undefined : (generation.stop as string),
+		topK: isUnset(advancedSampling.topK)
+			? undefined
+			: validatePositiveNumber(executeFunctions, advancedSampling.topK, 'Top K'),
+		repetitionPenalty: isUnset(advancedSampling.repetitionPenalty)
+			? undefined
+			: validatePositiveNumber(
+					executeFunctions,
+					advancedSampling.repetitionPenalty,
+					'Repetition Penalty',
+				),
+		minP: isUnset(advancedSampling.minP)
+			? undefined
+			: validateRange(executeFunctions, advancedSampling.minP, 'Min P'),
+		topA: isUnset(advancedSampling.topA)
+			? undefined
+			: validateRange(executeFunctions, advancedSampling.topA, 'Top A'),
+		transforms:
+			Array.isArray(advancedSampling.transforms) && advancedSampling.transforms.length > 0
+				? (advancedSampling.transforms as string[])
+				: undefined,
+	};
+}
+
+function buildMetadataExtras(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+): Record<string, unknown> {
+	const defaults = buildMetadata(
+		executeFunctions,
+		itemIndex,
+		resolvePrimaryModel(executeFunctions, itemIndex),
+	);
+	const extras = { ...defaults } as Record<string, unknown>;
+	const defaultKeys = new Set([
+		'execution_id',
+		'workflow_id',
+		'workflow_name',
+		'node_name',
+		'item_index',
+		'model',
+		'validation_attempt',
+	]);
+
+	for (const key of Object.keys(defaults)) {
+		if (defaultKeys.has(key)) {
+			delete extras[key];
+		}
+	}
+
+	return extras;
+}
+
+function buildPlugins(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject[] {
+	const integrations = executeFunctions.getNodeParameter(
+		'integrations',
+		itemIndex,
+		{},
+	) as IDataObject;
+	const plugins: IDataObject[] = [];
+
+	if ((integrations.responseHealing as boolean | undefined) ?? false) {
+		plugins.push({ id: 'response-healing' });
+	}
+
+	const webPlugin = buildWebPlugin(executeFunctions, itemIndex);
+
+	if (webPlugin !== undefined) {
+		plugins.push(webPlugin);
+	}
+
+	return plugins;
+}
 
 function buildRequestBody(
 	executeFunctions: IExecuteFunctions,

@@ -87,7 +87,7 @@ test('Openrouter LLM keeps the workflow-compatible top-level parameter surface',
 			default: property.default,
 		})),
 		[
-			{ name: 'model', default: { mode: 'list', value: 'openai/gpt-4o-mini' } },
+			{ name: 'model', default: { mode: 'list', value: 'openai/gpt-oss-120b' } },
 			{ name: 'modelOptions', default: {} },
 			{ name: 'promptMode', default: 'systemUser' },
 			{ name: 'systemMessage', default: '' },

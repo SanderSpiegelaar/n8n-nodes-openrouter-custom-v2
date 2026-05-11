@@ -4,6 +4,7 @@ exports.OpenrouterLlm = void 0;
 const n8n_workflow_1 = require("n8n-workflow");
 const StructuredOutputParser_1 = require("./StructuredOutputParser");
 const OpenRouterModelCatalog_1 = require("./OpenRouterModelCatalog");
+const OpenRouterExecution_1 = require("./OpenRouterExecution");
 const VALID_MESSAGE_ROLES = ['system', 'user', 'assistant'];
 const SUPPORTED_MODEL_VARIANTS = [
     ':exacto',
@@ -825,6 +826,31 @@ class OpenrouterLlm {
                 const webPluginEnabled = buildWebPlugin(this, itemIndex) !== undefined;
                 validateRouting(this, modelVariant, provider, webPluginEnabled);
                 const headers = buildHeaders(this, itemIndex);
+                if (outputMode === 'text') {
+                    const executionResult = await (0, OpenRouterExecution_1.executeOpenRouter)({
+                        input: buildOpenRouterExecutionInput(this, itemIndex, provider),
+                        sendChat: async (body) => {
+                            var _a, _b, _c, _d;
+                            const response = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
+                                method: 'POST',
+                                baseURL: baseUrl,
+                                url: '/chat/completions',
+                                headers,
+                                json: true,
+                                body,
+                            }));
+                            return {
+                                response,
+                                text: (_d = (_c = (_b = (_a = response.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) !== null && _d !== void 0 ? _d : '',
+                            };
+                        },
+                    });
+                    returnData.push({
+                        json: executionResult.data,
+                        pairedItem: { item: itemIndex },
+                    });
+                    continue;
+                }
                 const initialBody = buildRequestBody(this, itemIndex, 1, outputMode, compiledSchema);
                 if (provider !== undefined) {
                     initialBody.provider = provider;
@@ -841,10 +867,7 @@ class OpenrouterLlm {
                 let lastRawText = (_e = (_d = (_c = (_b = initialResponse.choices) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.message) === null || _d === void 0 ? void 0 : _d.content) !== null && _e !== void 0 ? _e : '';
                 let structured = null;
                 let repairAttemptsUsed = 0;
-                if (outputMode === 'text') {
-                    structured = null;
-                }
-                else {
+                {
                     const repair = this.getNodeParameter('repair', itemIndex, {});
                     const repairModel = resolveModelLocator(repair.model, StructuredOutputParser_1.DEFAULT_REPAIR_MODEL);
                     const repairOutcome = await (0, StructuredOutputParser_1.evaluateStructuredOutputWithRepair)({
@@ -940,6 +963,109 @@ class OpenrouterLlm {
     }
 }
 exports.OpenrouterLlm = OpenrouterLlm;
+function buildOpenRouterExecutionInput(executeFunctions, itemIndex, provider) {
+    var _a, _b, _c;
+    const workflow = executeFunctions.getWorkflow();
+    const reasoning = buildReasoning(executeFunctions, executeFunctions.getNodeParameter('reasoning', itemIndex, {}));
+    const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {});
+    const sessionId = (_a = integrations.sessionId) !== null && _a !== void 0 ? _a : '';
+    const primaryModel = resolvePrimaryModel(executeFunctions, itemIndex);
+    return {
+        modelRouting: {
+            primaryModel,
+            fallbackModels: resolveFallbackModels(executeFunctions, itemIndex),
+        },
+        messages: buildMessages(executeFunctions, itemIndex),
+        outputMode: 'text',
+        sampling: buildSamplingInput(executeFunctions, itemIndex),
+        metadata: {
+            defaults: {
+                executionId: executeFunctions.getExecutionId(),
+                workflowId: (_b = workflow.id) !== null && _b !== void 0 ? _b : '',
+                workflowName: (_c = workflow.name) !== null && _c !== void 0 ? _c : '',
+                nodeName: executeFunctions.getNode().name,
+                itemIndex,
+            },
+            extras: buildMetadataExtras(executeFunctions, itemIndex),
+        },
+        provider: provider,
+        plugins: buildPlugins(executeFunctions, itemIndex),
+        sessionId,
+        reasoning: {
+            request: reasoning,
+            excludeFromResponse: executeFunctions.getNodeParameter('reasoning', itemIndex, {}).exclude === true,
+        },
+    };
+}
+function buildSamplingInput(executeFunctions, itemIndex) {
+    const generation = executeFunctions.getNodeParameter('generation', itemIndex, {});
+    const advancedSampling = executeFunctions.getNodeParameter('advancedSampling', itemIndex, {});
+    return {
+        temperature: isUnset(generation.temperature) ? undefined : generation.temperature,
+        maxTokens: isUnset(generation.maxTokens)
+            ? undefined
+            : validatePositiveNumber(executeFunctions, generation.maxTokens, 'Max Tokens'),
+        topP: isUnset(generation.topP) ? undefined : generation.topP,
+        frequencyPenalty: isUnset(generation.frequencyPenalty)
+            ? undefined
+            : generation.frequencyPenalty,
+        presencePenalty: isUnset(generation.presencePenalty)
+            ? undefined
+            : generation.presencePenalty,
+        promptCacheKey: isUnset(generation.promptCacheKey)
+            ? undefined
+            : validateNonEmptyText(executeFunctions, generation.promptCacheKey, 'Prompt Cache Key'),
+        seed: isUnset(generation.seed) ? undefined : generation.seed,
+        stop: isUnset(generation.stop) ? undefined : generation.stop,
+        topK: isUnset(advancedSampling.topK)
+            ? undefined
+            : validatePositiveNumber(executeFunctions, advancedSampling.topK, 'Top K'),
+        repetitionPenalty: isUnset(advancedSampling.repetitionPenalty)
+            ? undefined
+            : validatePositiveNumber(executeFunctions, advancedSampling.repetitionPenalty, 'Repetition Penalty'),
+        minP: isUnset(advancedSampling.minP)
+            ? undefined
+            : validateRange(executeFunctions, advancedSampling.minP, 'Min P'),
+        topA: isUnset(advancedSampling.topA)
+            ? undefined
+            : validateRange(executeFunctions, advancedSampling.topA, 'Top A'),
+        transforms: Array.isArray(advancedSampling.transforms) && advancedSampling.transforms.length > 0
+            ? advancedSampling.transforms
+            : undefined,
+    };
+}
+function buildMetadataExtras(executeFunctions, itemIndex) {
+    const defaults = buildMetadata(executeFunctions, itemIndex, resolvePrimaryModel(executeFunctions, itemIndex));
+    const extras = { ...defaults };
+    const defaultKeys = new Set([
+        'execution_id',
+        'workflow_id',
+        'workflow_name',
+        'node_name',
+        'item_index',
+        'model',
+        'validation_attempt',
+    ]);
+    for (const key of Object.keys(defaults)) {
+        if (defaultKeys.has(key)) {
+            delete extras[key];
+        }
+    }
+    return extras;
+}
+function buildPlugins(executeFunctions, itemIndex) {
+    var _a;
+    const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {});
+    const plugins = [];
+    if ((_a = integrations.responseHealing) !== null && _a !== void 0 ? _a : false) {
+        plugins.push({ id: 'response-healing' });
+    }
+    const webPlugin = buildWebPlugin(executeFunctions, itemIndex);
+    if (webPlugin !== undefined) {
+        plugins.push(webPlugin);
+    }
+    return plugins;
+}
 function buildRequestBody(executeFunctions, itemIndex, attempt = 1, outputMode = 'text', compiledSchema) {
     var _a, _b;
     const modelPayload = buildModelPayload(executeFunctions, itemIndex);
