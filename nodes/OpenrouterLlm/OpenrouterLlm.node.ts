@@ -14,6 +14,7 @@ import {
 	compileStructuredOutputSchema,
 	validateStructuredOutput,
 	type StructuredOutputMode,
+	type StructuredValidationIssue,
 } from './StructuredOutputParser';
 
 type ChatCompletionResponse = IDataObject & {
@@ -40,6 +41,11 @@ const SUPPORTED_MODEL_VARIANTS = [
 ] as const;
 const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'] as const;
 const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
+const DEFAULT_REPAIR_MODEL = 'openai/gpt-oss-120b:nitro';
+const DEFAULT_REPAIR_TEMPERATURE = 0.1;
+const DEFAULT_REPAIR_REASONING_EFFORT = 'none';
+const DEFAULT_REPAIR_PROMPT_TEMPLATE = `You repair assistant output so it satisfies structured output validation.\n\nInstructions:\n{instructions}\n\nInvalid completion:\n{completion}\n\nValidation error:\n{error}\n\nReturn only the corrected JSON value. Do not include markdown fences or commentary.`;
+const REQUIRED_REPAIR_PROMPT_PLACEHOLDERS = ['instructions', 'completion', 'error'] as const;
 
 export class OpenrouterLlm implements INodeType {
 	description: INodeTypeDescription = {
@@ -628,20 +634,92 @@ export class OpenrouterLlm implements INodeType {
 				description: 'JSON Schema (draft-07) used to validate the assistant response',
 			},
 			{
-				displayName: 'Max Validation Attempts',
+				displayName: 'Max Repair Attempts',
 				name: 'maxValidationAttempts',
 				type: 'number',
 				typeOptions: {
-					minValue: 1,
+					minValue: 0,
 					maxValue: 5,
 				},
-				default: 3,
+				default: 2,
 				displayOptions: {
 					show: {
 						outputMode: ['json_object', 'json_schema'],
 					},
 				},
-				description: 'Maximum total attempts (initial + repair retries) before failing',
+				description: 'Maximum repair calls after the initial response before failing',
+			},
+			{
+				displayName: 'Repair',
+				name: 'repair',
+				type: 'collection',
+				placeholder: 'Add Repair Option',
+				default: {},
+				displayOptions: {
+					show: {
+						outputMode: ['json_object', 'json_schema'],
+					},
+				},
+				options: [
+					{
+						displayName: 'Model',
+						name: 'model',
+						type: 'resourceLocator',
+						default: { mode: 'list', value: DEFAULT_REPAIR_MODEL },
+						modes: [
+							{
+								displayName: 'From List',
+								name: 'list',
+								type: 'list',
+								typeOptions: {
+									searchListMethod: 'getOpenRouterModels',
+									searchable: true,
+								},
+							},
+							{
+								displayName: 'ID',
+								name: 'id',
+								type: 'string',
+							},
+						],
+						description: 'OpenRouter model to use only for structured-output repair calls',
+					},
+					{
+						displayName: 'Prompt Template',
+						name: 'promptTemplate',
+						type: 'string',
+						typeOptions: { rows: 8 },
+						default: '',
+						description:
+							'Custom repair prompt. Must include {instructions}, {completion}, and {error}. Empty uses the default template.',
+					},
+					{
+						displayName: 'Reasoning Effort',
+						name: 'reasoningEffort',
+						type: 'options',
+						options: [
+							{ name: 'High', value: 'high' },
+							{ name: 'Low', value: 'low' },
+							{ name: 'Medium', value: 'medium' },
+							{ name: 'Minimal', value: 'minimal' },
+							{ name: 'None', value: 'none' },
+						],
+						default: DEFAULT_REPAIR_REASONING_EFFORT,
+						description: 'Reasoning effort to send on repair requests',
+					},
+					{
+						displayName: 'Temperature',
+						name: 'temperature',
+						type: 'number',
+						typeOptions: {
+							minValue: 0,
+							maxValue: 2,
+							numberPrecision: 2,
+						},
+						default: DEFAULT_REPAIR_TEMPERATURE,
+						description: 'Temperature to send on repair requests',
+					},
+				],
 			},
 			{
 				displayName: 'Provider Routing',
@@ -828,11 +906,12 @@ export class OpenrouterLlm implements INodeType {
 				const modelOptions = this.getNodeParameter('modelOptions', itemIndex, {}) as IDataObject;
 				const modelVariant = (modelOptions.modelVariant as string | undefined) ?? '';
 				const outputMode = this.getNodeParameter('outputMode', itemIndex, 'text') as OutputMode;
-				const maxAttempts =
+				const maxRepairAttempts =
 					outputMode === 'text'
-						? 1
-						: (this.getNodeParameter('maxValidationAttempts', itemIndex, 3) as number);
-				const compiledValidator =
+						? 0
+						: (this.getNodeParameter('maxValidationAttempts', itemIndex, 2) as number);
+				const maxAttempts = 1 + maxRepairAttempts;
+				const compiledSchema =
 					outputMode === 'json_schema' ? compileSchema(this, itemIndex) : undefined;
 				const provider = buildProvider(this, itemIndex, outputMode);
 				const webPluginEnabled = buildWebPlugin(this, itemIndex) !== undefined;
@@ -841,20 +920,24 @@ export class OpenrouterLlm implements INodeType {
 
 				let attempt = 1;
 				let lastErrors: string[] = [];
+				let lastValidationDetails: StructuredValidationIssue[] = [];
+				let originalRawText = '';
 				let lastRawText = '';
 				let lastResponse: ChatCompletionResponse | undefined;
 				let structured: unknown = null;
-				const correctiveMessages: ChatMessage[] = [];
+				let repairAttemptsUsed = 0;
 
 				while (attempt <= maxAttempts) {
-					const body = buildRequestBody(this, itemIndex, attempt, outputMode, compiledValidator);
+					const body =
+						attempt === 1
+							? buildRequestBody(this, itemIndex, attempt, outputMode, compiledSchema)
+							: buildRepairRequestBody(this, itemIndex, attempt, outputMode, {
+									errors: lastErrors,
+									completion: lastRawText,
+								});
 
-					if (provider !== undefined) {
+					if (attempt === 1 && provider !== undefined) {
 						body.provider = provider;
-					}
-
-					if (correctiveMessages.length > 0) {
-						body.messages = [...(body.messages as ChatMessage[]), ...correctiveMessages];
 					}
 
 					const response = (await this.helpers.httpRequestWithAuthentication.call(
@@ -871,36 +954,38 @@ export class OpenrouterLlm implements INodeType {
 					)) as ChatCompletionResponse;
 					lastResponse = response;
 					lastRawText = response.choices?.[0]?.message?.content ?? '';
+					if (attempt === 1) {
+						originalRawText = lastRawText;
+					}
 
 					if (outputMode === 'text') {
 						structured = null;
 						break;
 					}
 
-					const validation = validateStructuredOutput(outputMode, lastRawText, compiledValidator);
+					const validation = validateStructuredOutput(outputMode, lastRawText, compiledSchema?.validator);
 
 					if (validation.ok) {
 						structured = validation.value;
+						repairAttemptsUsed = Math.max(0, attempt - 1);
+						if (repairAttemptsUsed > 0) {
+							lastRawText = JSON.stringify(structured);
+						}
 						break;
 					}
 
 					lastErrors = validation.errors;
+					lastValidationDetails = validation.details;
 
 					if (attempt === maxAttempts) {
-						throw new NodeOperationError(
-							this.getNode(),
-							`Structured output validation failed after ${attempt} attempts: ${lastErrors.join('; ')}. Raw model text: ${truncateForError(lastRawText)}`,
-							{
-								itemIndex,
-								description: outputMode === 'json_schema' ? JSON.stringify(lastErrors) : undefined,
-							},
-						);
+						throw buildStructuredOutputError(this, itemIndex, attempt, {
+							errors: lastErrors,
+							details: lastValidationDetails,
+							originalRawText,
+							latestRepairText: attempt > 1 ? lastRawText : '',
+						});
 					}
 
-					correctiveMessages.push({
-						role: 'system',
-						content: buildCorrectiveMessage(lastErrors),
-					});
 					attempt += 1;
 				}
 
@@ -915,19 +1000,30 @@ export class OpenrouterLlm implements INodeType {
 					}
 				}
 
+				const outputJson: IDataObject = {
+					text: lastRawText,
+					structured: structured as IDataObject | null,
+					response: lastResponse,
+				};
+
+				if (repairAttemptsUsed > 0) {
+					outputJson.structuredOutputRepair = {
+						repaired: true,
+						repairAttempts: repairAttemptsUsed,
+					};
+				}
+
 				returnData.push({
-					json: {
-						text: lastRawText,
-						structured: structured as IDataObject | null,
-						response: lastResponse,
-					},
+					json: outputJson,
 					pairedItem: { item: itemIndex },
 				});
 			} catch (error) {
 				if (this.continueOnFail()) {
+					const diagnosticFields = getStructuredOutputDiagnosticFields(error);
 					returnData.push({
 						json: {
 							error: error instanceof Error ? error.message : String(error),
+							...diagnosticFields,
 						},
 						pairedItem: { item: itemIndex },
 					});
@@ -935,7 +1031,10 @@ export class OpenrouterLlm implements INodeType {
 				}
 
 				if (error instanceof NodeOperationError) {
-					throw error;
+					throw new NodeOperationError(this.getNode(), error.message, {
+						itemIndex,
+						description: error.description ?? undefined,
+					});
 				}
 
 				throw new NodeApiError(
@@ -969,7 +1068,7 @@ function buildRequestBody(
 	itemIndex: number,
 	attempt: number = 1,
 	outputMode: OutputMode = 'text',
-	compiledValidator?: ValidateFunction,
+	compiledSchema?: CompiledStructuredSchema,
 ): IDataObject {
 	const modelPayload = buildModelPayload(executeFunctions, itemIndex);
 	const resolvedModel = resolveMetadataModel(modelPayload);
@@ -980,10 +1079,10 @@ function buildRequestBody(
 
 	if (outputMode === 'json_object') {
 		body.response_format = { type: 'json_object' };
-	} else if (outputMode === 'json_schema' && compiledValidator !== undefined) {
+	} else if (outputMode === 'json_schema' && compiledSchema !== undefined) {
 		body.response_format = {
 			type: 'json_schema',
-			json_schema: { name: 'response', schema: compiledValidator.schema, strict: true },
+			json_schema: compiledSchema.responseFormat,
 		};
 	}
 	const generation = executeFunctions.getNodeParameter('generation', itemIndex, {}) as IDataObject;
@@ -1078,6 +1177,73 @@ function buildRequestBody(
 	addOptionalText(executeFunctions, body, 'session_id', sessionId, 'Session ID');
 
 	return body;
+}
+
+function buildRepairRequestBody(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+	attempt: number,
+	outputMode: OutputMode,
+	failure: { errors: string[]; completion: string },
+): IDataObject {
+	const repair = executeFunctions.getNodeParameter('repair', itemIndex, {}) as IDataObject;
+	const model = resolveModelLocator(repair.model as ModelLocatorValue | undefined, DEFAULT_REPAIR_MODEL);
+	const temperature = isUnset(repair.temperature)
+		? DEFAULT_REPAIR_TEMPERATURE
+		: (repair.temperature as number);
+	const reasoningEffort =
+		(repair.reasoningEffort as string | undefined) ?? DEFAULT_REPAIR_REASONING_EFFORT;
+	const body: IDataObject = {
+		model,
+		messages: [
+			{
+				role: 'user',
+				content: buildRepairPrompt(executeFunctions, repair, outputMode, failure),
+			},
+		],
+		metadata: buildMetadata(executeFunctions, itemIndex, model, attempt),
+		temperature,
+		reasoning: { effort: reasoningEffort },
+	};
+
+	body.response_format = { type: 'json_object' };
+
+	return body;
+}
+
+function buildRepairPrompt(
+	executeFunctions: IExecuteFunctions,
+	repair: IDataObject,
+	outputMode: OutputMode,
+	failure: { errors: string[]; completion: string },
+): string {
+	const customTemplate = repair.promptTemplate as string | undefined;
+	const template = customTemplate?.trim() ? customTemplate : DEFAULT_REPAIR_PROMPT_TEMPLATE;
+	validateRepairPromptTemplate(executeFunctions, template);
+
+	const instructions =
+		outputMode === 'json_schema'
+			? 'Repair the completion so it validates against the configured JSON Schema.'
+			: 'Repair the completion so it is a non-array JSON object.';
+
+	return template
+		.split('{instructions}')
+		.join(instructions)
+		.split('{completion}')
+		.join(failure.completion)
+		.split('{error}')
+		.join(failure.errors.slice(0, 5).join('\n'));
+}
+
+function validateRepairPromptTemplate(executeFunctions: IExecuteFunctions, template: string): void {
+	for (const placeholder of REQUIRED_REPAIR_PROMPT_PLACEHOLDERS) {
+		if (!template.includes(`{${placeholder}}`)) {
+			throw new NodeOperationError(
+				executeFunctions.getNode(),
+				`Repair Prompt Template is missing required placeholder {${placeholder}}.`,
+			);
+		}
+	}
 }
 
 function buildHeaders(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
@@ -1284,8 +1450,7 @@ function isUnset(value: unknown): boolean {
 
 function resolvePrimaryModel(executeFunctions: IExecuteFunctions, itemIndex: number): string {
 	const modelParameter = executeFunctions.getNodeParameter('model', itemIndex) as ModelLocatorValue;
-	const modelId =
-		typeof modelParameter === 'string' ? modelParameter : (modelParameter.value ?? '').toString();
+	const modelId = resolveModelLocator(modelParameter, '');
 	const modelOptions = executeFunctions.getNodeParameter(
 		'modelOptions',
 		itemIndex,
@@ -1308,6 +1473,16 @@ function resolvePrimaryModel(executeFunctions: IExecuteFunctions, itemIndex: num
 	}
 
 	return `${stripSupportedVariant(modelId)}${modelVariant}`;
+}
+
+function resolveModelLocator(modelParameter: ModelLocatorValue | undefined, defaultModel: string): string {
+	if (modelParameter === undefined) {
+		return defaultModel;
+	}
+
+	return typeof modelParameter === 'string'
+		? modelParameter
+		: (modelParameter.value ?? defaultModel).toString();
 }
 
 function resolveFallbackModels(executeFunctions: IExecuteFunctions, itemIndex: number): string[] {
@@ -1520,7 +1695,67 @@ function buildProvider(
 
 type OutputMode = StructuredOutputMode;
 
-function compileSchema(executeFunctions: IExecuteFunctions, itemIndex: number): ValidateFunction {
+type JsonSchemaResponseFormat = {
+	name: string;
+	schema: unknown;
+	strict: boolean;
+};
+
+type CompiledStructuredSchema = {
+	validator: ValidateFunction;
+	responseFormat: JsonSchemaResponseFormat;
+};
+
+type StructuredOutputFailureDiagnostics = {
+	errors: string[];
+	details: StructuredValidationIssue[];
+	originalRawText: string;
+	latestRepairText: string;
+};
+
+function buildStructuredOutputError(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+	attempt: number,
+	diagnostics: StructuredOutputFailureDiagnostics,
+): NodeOperationError {
+	const error = new NodeOperationError(
+		executeFunctions.getNode(),
+		`Structured output validation failed after ${attempt} attempts: ${diagnostics.errors.join('; ')}. Raw model text: ${truncateForError(diagnostics.latestRepairText || diagnostics.originalRawText)}`,
+		{
+			itemIndex,
+			description: JSON.stringify({
+				validationErrors: diagnostics.errors,
+				validationDetails: diagnostics.details,
+				originalOutputText: truncateForError(diagnostics.originalRawText),
+				latestRepairText:
+					diagnostics.latestRepairText === ''
+						? undefined
+						: truncateForError(diagnostics.latestRepairText),
+			}),
+		},
+	);
+
+	return Object.assign(error, { structuredOutputDiagnostics: diagnostics });
+}
+
+function getStructuredOutputDiagnosticFields(error: unknown): IDataObject {
+	const diagnostics = (error as { structuredOutputDiagnostics?: StructuredOutputFailureDiagnostics })
+		?.structuredOutputDiagnostics;
+
+	if (diagnostics === undefined) {
+		return {};
+	}
+
+	return {
+		structuredOutputValidationErrors: diagnostics.errors,
+		structuredOutputValidationDetails: diagnostics.details as unknown as IDataObject[],
+		structuredOutputOriginalText: diagnostics.originalRawText,
+		structuredOutputLatestRepairText: diagnostics.latestRepairText,
+	};
+}
+
+function compileSchema(executeFunctions: IExecuteFunctions, itemIndex: number): CompiledStructuredSchema {
 	const raw = executeFunctions.getNodeParameter('jsonSchema', itemIndex) as unknown;
 	let parsed: unknown = raw;
 
@@ -1535,8 +1770,13 @@ function compileSchema(executeFunctions: IExecuteFunctions, itemIndex: number): 
 		}
 	}
 
+	const responseFormat = normalizeJsonSchemaResponseFormat(parsed);
+
 	try {
-		return compileStructuredOutputSchema(parsed);
+		return {
+			validator: compileStructuredOutputSchema(responseFormat.schema),
+			responseFormat,
+		};
 	} catch (error) {
 		throw new NodeOperationError(
 			executeFunctions.getNode(),
@@ -1545,14 +1785,31 @@ function compileSchema(executeFunctions: IExecuteFunctions, itemIndex: number): 
 	}
 }
 
+function normalizeJsonSchemaResponseFormat(parsed: unknown): JsonSchemaResponseFormat {
+	if (isOpenAiJsonSchemaWrapper(parsed)) {
+		return {
+			name: typeof parsed.name === 'string' && parsed.name.trim() !== '' ? parsed.name : 'response',
+			schema: parsed.schema,
+			strict: typeof parsed.strict === 'boolean' ? parsed.strict : true,
+		};
+	}
 
-function buildCorrectiveMessage(errors: string[]): string {
-	const top = errors
-		.slice(0, 5)
-		.map((line) => `- ${line}`)
-		.join('\n');
-	return `Your previous response failed validation. Errors:\n${top}\nReturn only valid JSON matching the original schema. Do not repeat the schema.`;
+	return { name: 'response', schema: parsed, strict: true };
 }
+
+function isOpenAiJsonSchemaWrapper(
+	value: unknown,
+): value is { name?: unknown; schema: unknown; strict?: unknown } {
+	return (
+		value !== null &&
+		typeof value === 'object' &&
+		!Array.isArray(value) &&
+		Object.prototype.hasOwnProperty.call(value, 'schema') &&
+		(Object.prototype.hasOwnProperty.call(value, 'name') ||
+			Object.prototype.hasOwnProperty.call(value, 'strict'))
+	);
+}
+
 
 function buildWebPlugin(
 	executeFunctions: IExecuteFunctions,

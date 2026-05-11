@@ -1,6 +1,6 @@
 # Lock structured-output refactor with execution-level regression tests
 
-Status: needs-triage
+Status: done
 Type: AFK
 
 ## What to build
@@ -9,13 +9,13 @@ Lock the structured-output parser refactor with package-level regression coverag
 
 ## Acceptance criteria
 
-- [ ] Parser tests cover raw JSON, fenced JSON, JSON inside prose, invalid JSON, JSON Object root validation, JSON Schema validation, and conservative unwrapping.
-- [ ] Validation error tests prove human-friendly AJV messages and technical details are both produced.
-- [ ] Repair request tests prove default repair model, temperature, reasoning effort, and JSON Object response format are sent.
-- [ ] Execution-flow tests prove success-after-repair and failure-after-repairs behavior.
-- [ ] Continue On Fail tests prove debug fields are returned in item JSON.
-- [ ] Tests reuse the existing node execution test style with mocked execution context and captured OpenRouter request bodies.
-- [ ] Package build and test scripts pass as the regression gate.
+- [x] Parser tests cover raw JSON, fenced JSON, JSON inside prose, invalid JSON, JSON Object root validation, JSON Schema validation, and conservative unwrapping.
+- [x] Validation error tests prove human-friendly AJV messages and technical details are both produced.
+- [x] Repair request tests prove default repair model, temperature, reasoning effort, and JSON Object response format are sent.
+- [x] Execution-flow tests prove success-after-repair and failure-after-repairs behavior.
+- [x] Continue On Fail tests prove debug fields are returned in item JSON.
+- [x] Tests reuse the existing node execution test style with mocked execution context and captured OpenRouter request bodies.
+- [x] Package build and test scripts pass as the regression gate.
 
 ## Blocked by
 
@@ -25,3 +25,5 @@ Lock the structured-output parser refactor with package-level regression coverag
 - .scratch/structured-output-parser-refactor/issues/04-repair-invalid-structured-output-end-to-end.md
 
 ## Comments
+
+- 2026-05-11: Verified execution-level structured-output regression coverage in `tests/openrouter-llm.test.js`; `npm test -- --test-reporter=spec` passes (64 tests, includes build gate).

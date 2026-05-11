@@ -3,9 +3,17 @@ import addFormats from 'ajv-formats';
 
 export type StructuredOutputMode = 'text' | 'json_object' | 'json_schema';
 
+export type StructuredValidationIssue = {
+	message: string;
+	path: string;
+	keyword?: string;
+	schemaPath?: string;
+	params?: Record<string, unknown>;
+};
+
 export type StructuredValidationResult =
 	| { ok: true; value: unknown }
-	| { ok: false; errors: string[] };
+	| { ok: false; errors: string[]; details: StructuredValidationIssue[] };
 
 const WRAPPER_KEYS = new Set(['json', 'structured', 'output', 'response', 'result', 'data']);
 
@@ -31,7 +39,12 @@ export function extractStructuredJson(rawText: string): StructuredValidationResu
 		}
 	}
 
-	return { ok: false, errors: errors.length > 0 ? errors : ['No JSON value found in response.'] };
+	const messages = errors.length > 0 ? errors : ['No JSON value found in response.'];
+	return {
+		ok: false,
+		errors: messages,
+		details: messages.map((message) => ({ message, path: '$' })),
+	};
 }
 
 export function validateStructuredOutput(
@@ -49,7 +62,8 @@ export function validateStructuredOutput(
 
 	if (mode === 'json_object') {
 		if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-			return { ok: false, errors: ['Response must be a non-null JSON object.'] };
+			const message = 'Response must be a non-null JSON object.';
+			return { ok: false, errors: [message], details: [{ message, path: '$' }] };
 		}
 		return { ok: true, value: parsed };
 	}
@@ -58,8 +72,8 @@ export function validateStructuredOutput(
 		if (compiledValidator(parsed)) {
 			return { ok: true, value: parsed };
 		}
-		const errors = (compiledValidator.errors ?? []).map(formatAjvError);
-		return { ok: false, errors };
+		const details = (compiledValidator.errors ?? []).map(formatAjvError);
+		return { ok: false, errors: details.map((detail) => detail.message), details };
 	}
 
 	return { ok: true, value: parsed };
@@ -168,7 +182,39 @@ function unwrapStructuredValue(value: unknown): unknown {
 	return current;
 }
 
-function formatAjvError(error: ErrorObject): string {
-	const path = error.instancePath ?? '';
-	return path === '' ? (error.message ?? 'invalid') : `${path} ${error.message ?? 'invalid'}`;
+function formatAjvError(error: ErrorObject): StructuredValidationIssue {
+	const path = toReadablePath(error.instancePath ?? '');
+	const message = formatReadableAjvMessage(error, path);
+	return {
+		message,
+		path,
+		keyword: error.keyword,
+		schemaPath: error.schemaPath,
+		params: error.params as Record<string, unknown>,
+	};
+}
+
+function toReadablePath(instancePath: string): string {
+	if (instancePath === '') {
+		return '$';
+	}
+
+	return `$${instancePath.replace(/\/(\d+|[^/]+)/g, (_match, segment: string) => {
+		const decoded = segment.replace(/~1/g, '/').replace(/~0/g, '~');
+		return /^\d+$/.test(decoded) ? `[${decoded}]` : `.${decoded}`;
+	})}`;
+}
+
+function formatReadableAjvMessage(error: ErrorObject, path: string): string {
+	const baseMessage = error.message ?? 'is invalid';
+
+	if (error.keyword === 'required' && 'missingProperty' in error.params) {
+		return `${path} is missing required property "${String(error.params.missingProperty)}".`;
+	}
+
+	if (error.keyword === 'additionalProperties' && 'additionalProperty' in error.params) {
+		return `${path} includes unsupported property "${String(error.params.additionalProperty)}".`;
+	}
+
+	return `${path} ${baseMessage}.`;
 }

@@ -28,7 +28,12 @@ function extractStructuredJson(rawText) {
             errors.push(error instanceof Error ? error.message : String(error));
         }
     }
-    return { ok: false, errors: errors.length > 0 ? errors : ['No JSON value found in response.'] };
+    const messages = errors.length > 0 ? errors : ['No JSON value found in response.'];
+    return {
+        ok: false,
+        errors: messages,
+        details: messages.map((message) => ({ message, path: '$' })),
+    };
 }
 function validateStructuredOutput(mode, rawText, compiledValidator) {
     var _a;
@@ -39,7 +44,8 @@ function validateStructuredOutput(mode, rawText, compiledValidator) {
     const parsed = unwrapStructuredValue(extracted.value);
     if (mode === 'json_object') {
         if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            return { ok: false, errors: ['Response must be a non-null JSON object.'] };
+            const message = 'Response must be a non-null JSON object.';
+            return { ok: false, errors: [message], details: [{ message, path: '$' }] };
         }
         return { ok: true, value: parsed };
     }
@@ -47,8 +53,8 @@ function validateStructuredOutput(mode, rawText, compiledValidator) {
         if (compiledValidator(parsed)) {
             return { ok: true, value: parsed };
         }
-        const errors = ((_a = compiledValidator.errors) !== null && _a !== void 0 ? _a : []).map(formatAjvError);
-        return { ok: false, errors };
+        const details = ((_a = compiledValidator.errors) !== null && _a !== void 0 ? _a : []).map(formatAjvError);
+        return { ok: false, errors: details.map((detail) => detail.message), details };
     }
     return { ok: true, value: parsed };
 }
@@ -135,8 +141,35 @@ function unwrapStructuredValue(value) {
     return current;
 }
 function formatAjvError(error) {
-    var _a, _b, _c;
-    const path = (_a = error.instancePath) !== null && _a !== void 0 ? _a : '';
-    return path === '' ? ((_b = error.message) !== null && _b !== void 0 ? _b : 'invalid') : `${path} ${(_c = error.message) !== null && _c !== void 0 ? _c : 'invalid'}`;
+    var _a;
+    const path = toReadablePath((_a = error.instancePath) !== null && _a !== void 0 ? _a : '');
+    const message = formatReadableAjvMessage(error, path);
+    return {
+        message,
+        path,
+        keyword: error.keyword,
+        schemaPath: error.schemaPath,
+        params: error.params,
+    };
+}
+function toReadablePath(instancePath) {
+    if (instancePath === '') {
+        return '$';
+    }
+    return `$${instancePath.replace(/\/(\d+|[^/]+)/g, (_match, segment) => {
+        const decoded = segment.replace(/~1/g, '/').replace(/~0/g, '~');
+        return /^\d+$/.test(decoded) ? `[${decoded}]` : `.${decoded}`;
+    })}`;
+}
+function formatReadableAjvMessage(error, path) {
+    var _a;
+    const baseMessage = (_a = error.message) !== null && _a !== void 0 ? _a : 'is invalid';
+    if (error.keyword === 'required' && 'missingProperty' in error.params) {
+        return `${path} is missing required property "${String(error.params.missingProperty)}".`;
+    }
+    if (error.keyword === 'additionalProperties' && 'additionalProperty' in error.params) {
+        return `${path} includes unsupported property "${String(error.params.additionalProperty)}".`;
+    }
+    return `${path} ${baseMessage}.`;
 }
 //# sourceMappingURL=StructuredOutputParser.js.map
