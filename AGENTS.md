@@ -31,6 +31,8 @@ be approved
   implement the missing parts** based on the real requirements / API docs.
 - Never output `Wordpress`-specific code unless the project is actually about
   WordPress.
+- **ALWAYS** commit and push to the remote after implementing a feature or fixing a bug.
+- **ALWAYS** mark issues in `.scratch/{feature}/issues/` done after implementing a ticket.
 
 ## Project structure
 
@@ -88,14 +90,14 @@ project _may_ contain example nodes and/or credentials that need to be
 
 Load these before working on the relevant area:
 
-| Working on...                   | Read first                                                   |
-| ------------------------------- | ------------------------------------------------------------ |
-| Any node file in `nodes/`       | `docs/agents/nodes.md` and `docs/agents/properties.md`       |
-| A declarative-style node        | above + `docs/agents/nodes-declarative.md`                   |
-| A programmatic-style node       | above + `docs/agents/nodes-programmatic.md`                  |
-| Files in `credentials/`         | `docs/agents/credentials.md`                                 |
-| Adding a new version to a node  | `docs/agents/versioning.md`                                  |
-| Starting a new task or planning | `docs/agents/workflow.md`                                    |
+| Working on...                   | Read first                                             |
+| ------------------------------- | ------------------------------------------------------ |
+| Any node file in `nodes/`       | `docs/agents/nodes.md` and `docs/agents/properties.md` |
+| A declarative-style node        | above + `docs/agents/nodes-declarative.md`             |
+| A programmatic-style node       | above + `docs/agents/nodes-programmatic.md`            |
+| Files in `credentials/`         | `docs/agents/credentials.md`                           |
+| Adding a new version to a node  | `docs/agents/versioning.md`                            |
+| Starting a new task or planning | `docs/agents/workflow.md`                              |
 
 ## Additional resources
 
