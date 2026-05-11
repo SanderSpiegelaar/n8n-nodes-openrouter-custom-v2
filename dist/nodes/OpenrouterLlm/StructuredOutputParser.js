@@ -3,11 +3,22 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.DEFAULT_REPAIR_PROMPT_TEMPLATE = exports.DEFAULT_REPAIR_REASONING_EFFORT = exports.DEFAULT_REPAIR_TEMPERATURE = exports.DEFAULT_REPAIR_MODEL = void 0;
 exports.compileStructuredOutputSchema = compileStructuredOutputSchema;
 exports.extractStructuredJson = extractStructuredJson;
+exports.evaluateStructuredOutput = evaluateStructuredOutput;
+exports.evaluateStructuredOutputWithRepair = evaluateStructuredOutputWithRepair;
+exports.buildStructuredOutputRepairRequestBody = buildStructuredOutputRepairRequestBody;
+exports.buildStructuredOutputRepairPrompt = buildStructuredOutputRepairPrompt;
+exports.validateStructuredOutputRepairPromptTemplate = validateStructuredOutputRepairPromptTemplate;
 exports.validateStructuredOutput = validateStructuredOutput;
 const ajv_1 = __importDefault(require("ajv"));
 const ajv_formats_1 = __importDefault(require("ajv-formats"));
+exports.DEFAULT_REPAIR_MODEL = 'openai/gpt-oss-120b:nitro';
+exports.DEFAULT_REPAIR_TEMPERATURE = 0.1;
+exports.DEFAULT_REPAIR_REASONING_EFFORT = 'none';
+exports.DEFAULT_REPAIR_PROMPT_TEMPLATE = `You repair assistant output so it satisfies structured output validation.\n\nInstructions:\n{instructions}\n\nInvalid completion:\n{completion}\n\nValidation error:\n{error}\n\nReturn only the corrected JSON value. Do not include markdown fences or commentary.`;
+const REQUIRED_REPAIR_PROMPT_PLACEHOLDERS = ['instructions', 'completion', 'error'];
 const WRAPPER_KEYS = new Set(['json', 'structured', 'output', 'response', 'result', 'data']);
 const ajvInstance = (() => {
     const ajv = new ajv_1.default({ allErrors: true, strict: false, useDefaults: false, removeAdditional: false });
@@ -35,6 +46,134 @@ function extractStructuredJson(rawText) {
         details: messages.map((message) => ({ message, path: '$' })),
     };
 }
+function evaluateStructuredOutput(config, initialText, initialResponse) {
+    return evaluateInitialStructuredOutput(config, initialText, initialResponse);
+}
+async function evaluateStructuredOutputWithRepair(config, initialText, initialResponse) {
+    const initialOutcome = evaluateInitialStructuredOutput(config, initialText, initialResponse);
+    if (initialOutcome.ok || config.repair === undefined || config.repair.maxAttempts <= 0) {
+        return initialOutcome;
+    }
+    let validationErrors = initialOutcome.error.validationErrors;
+    let validationDetails = initialOutcome.error.validationDetails;
+    let latestRepairText = '';
+    let latestResponse = initialResponse;
+    for (let repairAttempt = 1; repairAttempt <= config.repair.maxAttempts; repairAttempt++) {
+        const requestBody = buildStructuredOutputRepairRequestBody(config, repairAttempt + 1, {
+            completion: latestRepairText || initialText,
+            errors: validationErrors,
+        });
+        const repairResponse = await config.repair.send(requestBody);
+        latestRepairText = repairResponse.text;
+        latestResponse = repairResponse.response;
+        const validation = validateStructuredOutput(config.mode, latestRepairText, config.compiledValidator);
+        if (validation.ok) {
+            return {
+                ok: true,
+                text: stringifyStructuredValue(validation.value),
+                structured: validation.value,
+                response: latestResponse,
+                repair: {
+                    repaired: true,
+                    repairAttempts: repairAttempt,
+                    latestRepairText,
+                },
+            };
+        }
+        validationErrors = validation.errors;
+        validationDetails = validation.details;
+    }
+    return {
+        ok: false,
+        error: {
+            message: `Structured output validation failed: ${validationErrors.join('; ')}`,
+            validationErrors,
+            validationDetails,
+            originalRawText: initialText,
+            repair: {
+                repaired: false,
+                repairAttempts: config.repair.maxAttempts,
+                latestRepairText,
+            },
+        },
+    };
+}
+function evaluateInitialStructuredOutput(config, initialText, initialResponse) {
+    if (config.mode === 'text') {
+        return {
+            ok: true,
+            text: initialText,
+            structured: null,
+            response: initialResponse,
+            repair: createNoRepairMetadata(),
+        };
+    }
+    const validation = validateStructuredOutput(config.mode, initialText, config.compiledValidator);
+    if (validation.ok) {
+        return {
+            ok: true,
+            text: initialText,
+            structured: validation.value,
+            response: initialResponse,
+            repair: createNoRepairMetadata(),
+        };
+    }
+    return {
+        ok: false,
+        error: {
+            message: `Structured output validation failed: ${validation.errors.join('; ')}`,
+            validationErrors: validation.errors,
+            validationDetails: validation.details,
+            originalRawText: initialText,
+            repair: createNoRepairMetadata(),
+        },
+    };
+}
+function buildStructuredOutputRepairRequestBody(config, attempt, failure) {
+    var _a, _b, _c, _d, _e;
+    if (config.repair === undefined) {
+        throw new Error('Structured Output Repair config is required.');
+    }
+    const model = (_a = config.repair.model) !== null && _a !== void 0 ? _a : exports.DEFAULT_REPAIR_MODEL;
+    const body = {
+        model,
+        messages: [
+            {
+                role: 'user',
+                content: buildStructuredOutputRepairPrompt(config.mode, config.repair.promptTemplate, failure),
+            },
+        ],
+        temperature: (_b = config.repair.temperature) !== null && _b !== void 0 ? _b : exports.DEFAULT_REPAIR_TEMPERATURE,
+        reasoning: { effort: (_c = config.repair.reasoningEffort) !== null && _c !== void 0 ? _c : exports.DEFAULT_REPAIR_REASONING_EFFORT },
+        response_format: { type: 'json_object' },
+    };
+    const metadata = (_e = (_d = config.repair).metadata) === null || _e === void 0 ? void 0 : _e.call(_d, attempt, model);
+    if (metadata !== undefined) {
+        body.metadata = metadata;
+    }
+    return body;
+}
+function buildStructuredOutputRepairPrompt(mode, promptTemplate, failure) {
+    const template = (promptTemplate === null || promptTemplate === void 0 ? void 0 : promptTemplate.trim()) ? promptTemplate : exports.DEFAULT_REPAIR_PROMPT_TEMPLATE;
+    validateStructuredOutputRepairPromptTemplate(template);
+    const instructions = mode === 'json_schema'
+        ? 'Repair the completion so it validates against the configured JSON Schema.'
+        : 'Repair the completion so it is a non-array JSON object.';
+    return template
+        .split('{instructions}')
+        .join(instructions)
+        .split('{completion}')
+        .join(failure.completion)
+        .split('{error}')
+        .join(failure.errors.slice(0, 5).join('\n'));
+}
+function validateStructuredOutputRepairPromptTemplate(template) {
+    for (const placeholder of REQUIRED_REPAIR_PROMPT_PLACEHOLDERS) {
+        if (!template.includes(`{${placeholder}}`)) {
+            throw new Error(`Repair Prompt Template is missing required placeholder {${placeholder}}.`);
+        }
+    }
+}
 function validateStructuredOutput(mode, rawText, compiledValidator) {
     var _a;
     const extracted = extractStructuredJson(rawText);
@@ -57,6 +196,16 @@ function validateStructuredOutput(mode, rawText, compiledValidator) {
         return { ok: false, errors: details.map((detail) => detail.message), details };
     }
     return { ok: true, value: parsed };
+}
+function createNoRepairMetadata() {
+    return {
+        repaired: false,
+        repairAttempts: 0,
+        latestRepairText: '',
+    };
+}
+function stringifyStructuredValue(value) {
+    return JSON.stringify(value);
 }
 function collectJsonCandidates(rawText) {
     const trimmed = rawText.trim();

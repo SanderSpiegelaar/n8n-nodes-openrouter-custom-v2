@@ -15,6 +15,67 @@ export type StructuredValidationResult =
 	| { ok: true; value: unknown }
 	| { ok: false; errors: string[]; details: StructuredValidationIssue[] };
 
+export type StructuredOutputRepairMetadata = {
+	repaired: boolean;
+	repairAttempts: number;
+	latestRepairText: string;
+};
+
+export type StructuredOutputConfig = {
+	mode: StructuredOutputMode;
+	compiledValidator?: ValidateFunction;
+	repair?: StructuredOutputRepairConfig;
+};
+
+export type StructuredOutputRepairConfig = {
+	maxAttempts: number;
+	model?: string;
+	temperature?: number;
+	reasoningEffort?: string;
+	promptTemplate?: string;
+	metadata?: (attempt: number, model: string) => unknown;
+	send: StructuredOutputRepairSender;
+};
+
+export type StructuredOutputRepairSender = (body: StructuredOutputRepairRequestBody) => Promise<{
+	text: string;
+	response: unknown;
+}>;
+
+export type StructuredOutputRepairRequestBody = {
+	model: string;
+	messages: Array<{ role: 'user'; content: string }>;
+	metadata?: unknown;
+	temperature: number;
+	reasoning: { effort: string };
+	response_format: { type: 'json_object' };
+};
+
+export type StructuredOutputOutcome =
+	| {
+			ok: true;
+			text: string;
+			structured: unknown;
+			response: unknown;
+			repair: StructuredOutputRepairMetadata;
+	  }
+	| {
+			ok: false;
+			error: {
+				message: string;
+				validationErrors: string[];
+				validationDetails: StructuredValidationIssue[];
+				originalRawText: string;
+				repair: StructuredOutputRepairMetadata;
+			};
+	  };
+
+export const DEFAULT_REPAIR_MODEL = 'openai/gpt-oss-120b:nitro';
+export const DEFAULT_REPAIR_TEMPERATURE = 0.1;
+export const DEFAULT_REPAIR_REASONING_EFFORT = 'none';
+export const DEFAULT_REPAIR_PROMPT_TEMPLATE = `You repair assistant output so it satisfies structured output validation.\n\nInstructions:\n{instructions}\n\nInvalid completion:\n{completion}\n\nValidation error:\n{error}\n\nReturn only the corrected JSON value. Do not include markdown fences or commentary.`;
+const REQUIRED_REPAIR_PROMPT_PLACEHOLDERS = ['instructions', 'completion', 'error'] as const;
+
 const WRAPPER_KEYS = new Set(['json', 'structured', 'output', 'response', 'result', 'data']);
 
 const ajvInstance = (() => {
@@ -47,6 +108,179 @@ export function extractStructuredJson(rawText: string): StructuredValidationResu
 	};
 }
 
+export function evaluateStructuredOutput(
+	config: StructuredOutputConfig,
+	initialText: string,
+	initialResponse: unknown,
+): StructuredOutputOutcome {
+	return evaluateInitialStructuredOutput(config, initialText, initialResponse);
+}
+
+export async function evaluateStructuredOutputWithRepair(
+	config: StructuredOutputConfig,
+	initialText: string,
+	initialResponse: unknown,
+): Promise<StructuredOutputOutcome> {
+	const initialOutcome = evaluateInitialStructuredOutput(config, initialText, initialResponse);
+
+	if (initialOutcome.ok || config.repair === undefined || config.repair.maxAttempts <= 0) {
+		return initialOutcome;
+	}
+
+	let validationErrors = initialOutcome.error.validationErrors;
+	let validationDetails = initialOutcome.error.validationDetails;
+	let latestRepairText = '';
+	let latestResponse = initialResponse;
+
+	for (let repairAttempt = 1; repairAttempt <= config.repair.maxAttempts; repairAttempt++) {
+		const requestBody = buildStructuredOutputRepairRequestBody(config, repairAttempt + 1, {
+			completion: latestRepairText || initialText,
+			errors: validationErrors,
+		});
+		const repairResponse = await config.repair.send(requestBody);
+		latestRepairText = repairResponse.text;
+		latestResponse = repairResponse.response;
+
+		const validation = validateStructuredOutput(
+			config.mode,
+			latestRepairText,
+			config.compiledValidator,
+		);
+
+		if (validation.ok) {
+			return {
+				ok: true,
+				text: stringifyStructuredValue(validation.value),
+				structured: validation.value,
+				response: latestResponse,
+				repair: {
+					repaired: true,
+					repairAttempts: repairAttempt,
+					latestRepairText,
+				},
+			};
+		}
+
+		validationErrors = validation.errors;
+		validationDetails = validation.details;
+	}
+
+	return {
+		ok: false,
+		error: {
+			message: `Structured output validation failed: ${validationErrors.join('; ')}`,
+			validationErrors,
+			validationDetails,
+			originalRawText: initialText,
+			repair: {
+				repaired: false,
+				repairAttempts: config.repair.maxAttempts,
+				latestRepairText,
+			},
+		},
+	};
+}
+
+function evaluateInitialStructuredOutput(
+	config: StructuredOutputConfig,
+	initialText: string,
+	initialResponse: unknown,
+): StructuredOutputOutcome {
+	if (config.mode === 'text') {
+		return {
+			ok: true,
+			text: initialText,
+			structured: null,
+			response: initialResponse,
+			repair: createNoRepairMetadata(),
+		};
+	}
+
+	const validation = validateStructuredOutput(config.mode, initialText, config.compiledValidator);
+
+	if (validation.ok) {
+		return {
+			ok: true,
+			text: initialText,
+			structured: validation.value,
+			response: initialResponse,
+			repair: createNoRepairMetadata(),
+		};
+	}
+
+	return {
+		ok: false,
+		error: {
+			message: `Structured output validation failed: ${validation.errors.join('; ')}`,
+			validationErrors: validation.errors,
+			validationDetails: validation.details,
+			originalRawText: initialText,
+			repair: createNoRepairMetadata(),
+		},
+	};
+}
+
+export function buildStructuredOutputRepairRequestBody(
+	config: StructuredOutputConfig,
+	attempt: number,
+	failure: { errors: string[]; completion: string },
+): StructuredOutputRepairRequestBody {
+	if (config.repair === undefined) {
+		throw new Error('Structured Output Repair config is required.');
+	}
+
+	const model = config.repair.model ?? DEFAULT_REPAIR_MODEL;
+	const body: StructuredOutputRepairRequestBody = {
+		model,
+		messages: [
+			{
+				role: 'user',
+				content: buildStructuredOutputRepairPrompt(config.mode, config.repair.promptTemplate, failure),
+			},
+		],
+		temperature: config.repair.temperature ?? DEFAULT_REPAIR_TEMPERATURE,
+		reasoning: { effort: config.repair.reasoningEffort ?? DEFAULT_REPAIR_REASONING_EFFORT },
+		response_format: { type: 'json_object' },
+	};
+
+	const metadata = config.repair.metadata?.(attempt, model);
+	if (metadata !== undefined) {
+		body.metadata = metadata;
+	}
+
+	return body;
+}
+
+export function buildStructuredOutputRepairPrompt(
+	mode: StructuredOutputMode,
+	promptTemplate: string | undefined,
+	failure: { errors: string[]; completion: string },
+): string {
+	const template = promptTemplate?.trim() ? promptTemplate : DEFAULT_REPAIR_PROMPT_TEMPLATE;
+	validateStructuredOutputRepairPromptTemplate(template);
+
+	const instructions =
+		mode === 'json_schema'
+			? 'Repair the completion so it validates against the configured JSON Schema.'
+			: 'Repair the completion so it is a non-array JSON object.';
+
+	return template
+		.split('{instructions}')
+		.join(instructions)
+		.split('{completion}')
+		.join(failure.completion)
+		.split('{error}')
+		.join(failure.errors.slice(0, 5).join('\n'));
+}
+
+export function validateStructuredOutputRepairPromptTemplate(template: string): void {
+	for (const placeholder of REQUIRED_REPAIR_PROMPT_PLACEHOLDERS) {
+		if (!template.includes(`{${placeholder}}`)) {
+			throw new Error(`Repair Prompt Template is missing required placeholder {${placeholder}}.`);
+		}
+	}
+}
+
 export function validateStructuredOutput(
 	mode: StructuredOutputMode,
 	rawText: string,
@@ -77,6 +311,18 @@ export function validateStructuredOutput(
 	}
 
 	return { ok: true, value: parsed };
+}
+
+function createNoRepairMetadata(): StructuredOutputRepairMetadata {
+	return {
+		repaired: false,
+		repairAttempts: 0,
+		latestRepairText: '',
+	};
+}
+
+function stringifyStructuredValue(value: unknown): string {
+	return JSON.stringify(value);
 }
 
 function collectJsonCandidates(rawText: string): string[] {

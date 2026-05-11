@@ -82,20 +82,20 @@ project _may_ contain example nodes and/or credentials that need to be
 - Make sure to use **proper types whenever possible**
 - If you are updating the npm package version, make sure to **update
   CHANGELOG.md** in the root of the repository
-- Read `.agents/workflow.md` for more info
+- Read `docs/agents/workflow.md` for more info
 
 ## Context-specific docs
 
 Load these before working on the relevant area:
 
-| Working on...                   | Read first                                     |
-| ------------------------------- | ---------------------------------------------- |
-| Any node file in `nodes/`       | `.agents/nodes.md` and `.agents/properties.md` |
-| A declarative-style node        | above + `.agents/nodes-declarative.md`         |
-| A programmatic-style node       | above + `.agents/nodes-programmatic.md`        |
-| Files in `credentials/`         | `.agents/credentials.md`                       |
-| Adding a new version to a node  | `.agents/versioning.md`                        |
-| Starting a new task or planning | `.agents/workflow.md`                          |
+| Working on...                   | Read first                                                   |
+| ------------------------------- | ------------------------------------------------------------ |
+| Any node file in `nodes/`       | `docs/agents/nodes.md` and `docs/agents/properties.md`       |
+| A declarative-style node        | above + `docs/agents/nodes-declarative.md`                   |
+| A programmatic-style node       | above + `docs/agents/nodes-programmatic.md`                  |
+| Files in `credentials/`         | `docs/agents/credentials.md`                                 |
+| Adding a new version to a node  | `docs/agents/versioning.md`                                  |
+| Starting a new task or planning | `docs/agents/workflow.md`                                    |
 
 ## Additional resources
 

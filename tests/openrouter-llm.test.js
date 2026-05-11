@@ -809,6 +809,196 @@ test('structured parser extracts raw, fenced, and prose-embedded JSON values', (
 	});
 });
 
+test('structured output outcome returns valid initial structured data without n8n runtime dependencies', () => {
+	const {
+		evaluateStructuredOutput,
+	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
+	const response = { id: 'gen-1', choices: [{ message: { content: '{"answer":42}' } }] };
+
+	const result = evaluateStructuredOutput(
+		{ mode: 'json_object' },
+		'{"answer":42}',
+		response,
+	);
+
+	assert.deepEqual(result, {
+		ok: true,
+		text: '{"answer":42}',
+		structured: { answer: 42 },
+		response,
+		repair: { repaired: false, repairAttempts: 0, latestRepairText: '' },
+	});
+});
+
+test('structured output outcome returns diagnostic failure data before repair is wired in', () => {
+	const {
+		evaluateStructuredOutput,
+	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
+
+	const result = evaluateStructuredOutput(
+		{ mode: 'json_object' },
+		'[1,2,3]',
+		{ id: 'gen-1' },
+	);
+
+	assert.equal(result.ok, false);
+	assert.match(result.error.message, /non-null JSON object/i);
+	assert.deepEqual(result.error.validationErrors, ['Response must be a non-null JSON object.']);
+	assert.equal(result.error.validationDetails[0].path, '$');
+	assert.equal(result.error.originalRawText, '[1,2,3]');
+	assert.deepEqual(result.error.repair, {
+		repaired: false,
+		repairAttempts: 0,
+		latestRepairText: '',
+	});
+});
+
+test('structured output json_object mode requires a non-null non-array object', () => {
+	const {
+		evaluateStructuredOutput,
+	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
+
+	const valid = evaluateStructuredOutput({ mode: 'json_object' }, '{"answer":42}', { id: 'gen-1' });
+	const invalidValues = ['null', '[1,2,3]', '42', 'true', '"answer"'];
+
+	assert.equal(valid.ok, true);
+	assert.deepEqual(valid.structured, { answer: 42 });
+
+	for (const rawText of invalidValues) {
+		const result = evaluateStructuredOutput({ mode: 'json_object' }, rawText, { id: rawText });
+
+		assert.equal(result.ok, false);
+		assert.deepEqual(result.error.validationErrors, ['Response must be a non-null JSON object.']);
+		assert.equal(result.error.validationDetails[0].path, '$');
+	}
+});
+
+test('structured output repair loop uses a callback seam and returns repaired success metadata', async () => {
+	const {
+		evaluateStructuredOutputWithRepair,
+	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
+	const requestBodies = [];
+	const result = await evaluateStructuredOutputWithRepair(
+		{
+			mode: 'json_object',
+			repair: {
+				maxAttempts: 1,
+				metadata: (attempt, model) => ({ validation_attempt: attempt, model }),
+				send: async (body) => {
+					requestBodies.push(body);
+					return {
+						response: { id: 'repair-1' },
+						text: '{"json":{"answer":7}}',
+					};
+				},
+			},
+		},
+		'not json',
+		{ id: 'gen-1' },
+	);
+
+	assert.equal(requestBodies.length, 1);
+	assert.deepEqual(requestBodies[0].response_format, { type: 'json_object' });
+	assert.deepEqual(requestBodies[0].metadata, {
+		validation_attempt: 2,
+		model: 'openai/gpt-oss-120b:nitro',
+	});
+	assert.equal(result.ok, true);
+	assert.deepEqual(result.structured, { answer: 7 });
+	assert.equal(result.text, '{"answer":7}');
+	assert.deepEqual(result.response, { id: 'repair-1' });
+	assert.deepEqual(result.repair, {
+		repaired: true,
+		repairAttempts: 1,
+		latestRepairText: '{"json":{"answer":7}}',
+	});
+});
+
+test('structured output repair loop returns exhausted failure data with latest repair text', async () => {
+	const {
+		evaluateStructuredOutputWithRepair,
+	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
+	const result = await evaluateStructuredOutputWithRepair(
+		{
+			mode: 'json_object',
+			repair: {
+				maxAttempts: 2,
+				send: async () => ({ response: { id: 'repair' }, text: '[1,2,3]' }),
+			},
+		},
+		'not json',
+		{ id: 'gen-1' },
+	);
+
+	assert.equal(result.ok, false);
+	assert.equal(result.error.originalRawText, 'not json');
+	assert.equal(result.error.repair.latestRepairText, '[1,2,3]');
+	assert.equal(result.error.repair.repairAttempts, 2);
+	assert.match(result.error.validationErrors[0], /non-null JSON object/i);
+	assert.equal(result.error.validationDetails[0].path, '$');
+});
+
+test('structured output outcome validates JSON Schema through the focused module interface', () => {
+	const {
+		compileStructuredOutputSchema,
+		evaluateStructuredOutput,
+	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
+	const compiledValidator = compileStructuredOutputSchema({
+		type: 'object',
+		required: ['email'],
+		properties: { email: { type: 'string', format: 'email' } },
+	});
+
+	const valid = evaluateStructuredOutput(
+		{ mode: 'json_schema', compiledValidator },
+		'{"email":"a@b.co"}',
+		{ id: 'gen-1' },
+	);
+	const invalid = evaluateStructuredOutput(
+		{ mode: 'json_schema', compiledValidator },
+		'{}',
+		{ id: 'gen-2' },
+	);
+
+	assert.equal(valid.ok, true);
+	assert.deepEqual(valid.structured, { email: 'a@b.co' });
+	assert.equal(invalid.ok, false);
+	assert.deepEqual(invalid.error.validationErrors, ['$ is missing required property "email".']);
+	assert.equal(invalid.error.validationDetails[0].keyword, 'required');
+});
+
+test('structured output json_schema mode lets the schema decide the root type', () => {
+	const {
+		compileStructuredOutputSchema,
+		evaluateStructuredOutput,
+	} = require('../dist/nodes/OpenrouterLlm/StructuredOutputParser.js');
+	const arrayValidator = compileStructuredOutputSchema({ type: 'array', items: { type: 'number' } });
+	const stringValidator = compileStructuredOutputSchema({ type: 'string', minLength: 3 });
+
+	const arrayResult = evaluateStructuredOutput(
+		{ mode: 'json_schema', compiledValidator: arrayValidator },
+		'[1,2,3]',
+		{ id: 'array' },
+	);
+	const stringResult = evaluateStructuredOutput(
+		{ mode: 'json_schema', compiledValidator: stringValidator },
+		'"abc"',
+		{ id: 'string' },
+	);
+	const invalidString = evaluateStructuredOutput(
+		{ mode: 'json_schema', compiledValidator: stringValidator },
+		'{"abc":true}',
+		{ id: 'object' },
+	);
+
+	assert.equal(arrayResult.ok, true);
+	assert.deepEqual(arrayResult.structured, [1, 2, 3]);
+	assert.equal(stringResult.ok, true);
+	assert.equal(stringResult.structured, 'abc');
+	assert.equal(invalidString.ok, false);
+	assert.match(invalidString.error.validationErrors[0], /must be string/i);
+});
+
 test('structured parser unwraps unambiguous n8n-style wrappers only', () => {
 	const {
 		validateStructuredOutput,

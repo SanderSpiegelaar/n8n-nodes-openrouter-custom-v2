@@ -14,11 +14,6 @@ const SUPPORTED_MODEL_VARIANTS = [
 ];
 const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'];
 const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
-const DEFAULT_REPAIR_MODEL = 'openai/gpt-oss-120b:nitro';
-const DEFAULT_REPAIR_TEMPERATURE = 0.1;
-const DEFAULT_REPAIR_REASONING_EFFORT = 'none';
-const DEFAULT_REPAIR_PROMPT_TEMPLATE = `You repair assistant output so it satisfies structured output validation.\n\nInstructions:\n{instructions}\n\nInvalid completion:\n{completion}\n\nValidation error:\n{error}\n\nReturn only the corrected JSON value. Do not include markdown fences or commentary.`;
-const REQUIRED_REPAIR_PROMPT_PLACEHOLDERS = ['instructions', 'completion', 'error'];
 class OpenrouterLlm {
     constructor() {
         this.description = {
@@ -633,7 +628,7 @@ class OpenrouterLlm {
                             displayName: 'Model',
                             name: 'model',
                             type: 'resourceLocator',
-                            default: { mode: 'list', value: DEFAULT_REPAIR_MODEL },
+                            default: { mode: 'list', value: StructuredOutputParser_1.DEFAULT_REPAIR_MODEL },
                             modes: [
                                 {
                                     displayName: 'From List',
@@ -671,7 +666,7 @@ class OpenrouterLlm {
                                 { name: 'Minimal', value: 'minimal' },
                                 { name: 'None', value: 'none' },
                             ],
-                            default: DEFAULT_REPAIR_REASONING_EFFORT,
+                            default: StructuredOutputParser_1.DEFAULT_REPAIR_REASONING_EFFORT,
                             description: 'Reasoning effort to send on repair requests',
                         },
                         {
@@ -683,7 +678,7 @@ class OpenrouterLlm {
                                 maxValue: 2,
                                 numberPrecision: 2,
                             },
-                            default: DEFAULT_REPAIR_TEMPERATURE,
+                            default: StructuredOutputParser_1.DEFAULT_REPAIR_TEMPERATURE,
                             description: 'Temperature to send on repair requests',
                         },
                     ],
@@ -844,7 +839,7 @@ class OpenrouterLlm {
         };
     }
     async execute() {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g;
         const items = this.getInputData();
         const returnData = [];
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
@@ -857,67 +852,74 @@ class OpenrouterLlm {
                 const maxRepairAttempts = outputMode === 'text'
                     ? 0
                     : this.getNodeParameter('maxValidationAttempts', itemIndex, 2);
-                const maxAttempts = 1 + maxRepairAttempts;
                 const compiledSchema = outputMode === 'json_schema' ? compileSchema(this, itemIndex) : undefined;
                 const provider = buildProvider(this, itemIndex, outputMode);
                 const webPluginEnabled = buildWebPlugin(this, itemIndex) !== undefined;
                 validateRouting(this, modelVariant, provider, webPluginEnabled);
                 const headers = buildHeaders(this, itemIndex);
-                let attempt = 1;
-                let lastErrors = [];
-                let lastValidationDetails = [];
-                let originalRawText = '';
-                let lastRawText = '';
-                let lastResponse;
+                const initialBody = buildRequestBody(this, itemIndex, 1, outputMode, compiledSchema);
+                if (provider !== undefined) {
+                    initialBody.provider = provider;
+                }
+                const initialResponse = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
+                    method: 'POST',
+                    baseURL: baseUrl,
+                    url: '/chat/completions',
+                    headers,
+                    json: true,
+                    body: initialBody,
+                }));
+                let lastResponse = initialResponse;
+                let lastRawText = (_e = (_d = (_c = (_b = initialResponse.choices) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.message) === null || _d === void 0 ? void 0 : _d.content) !== null && _e !== void 0 ? _e : '';
                 let structured = null;
                 let repairAttemptsUsed = 0;
-                while (attempt <= maxAttempts) {
-                    const body = attempt === 1
-                        ? buildRequestBody(this, itemIndex, attempt, outputMode, compiledSchema)
-                        : buildRepairRequestBody(this, itemIndex, attempt, outputMode, {
-                            errors: lastErrors,
-                            completion: lastRawText,
-                        });
-                    if (attempt === 1 && provider !== undefined) {
-                        body.provider = provider;
-                    }
-                    const response = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
-                        method: 'POST',
-                        baseURL: baseUrl,
-                        url: '/chat/completions',
-                        headers,
-                        json: true,
-                        body,
-                    }));
-                    lastResponse = response;
-                    lastRawText = (_e = (_d = (_c = (_b = response.choices) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.message) === null || _d === void 0 ? void 0 : _d.content) !== null && _e !== void 0 ? _e : '';
-                    if (attempt === 1) {
-                        originalRawText = lastRawText;
-                    }
-                    if (outputMode === 'text') {
-                        structured = null;
-                        break;
-                    }
-                    const validation = (0, StructuredOutputParser_1.validateStructuredOutput)(outputMode, lastRawText, compiledSchema === null || compiledSchema === void 0 ? void 0 : compiledSchema.validator);
-                    if (validation.ok) {
-                        structured = validation.value;
-                        repairAttemptsUsed = Math.max(0, attempt - 1);
-                        if (repairAttemptsUsed > 0) {
-                            lastRawText = JSON.stringify(structured);
-                        }
-                        break;
-                    }
-                    lastErrors = validation.errors;
-                    lastValidationDetails = validation.details;
-                    if (attempt === maxAttempts) {
-                        throw buildStructuredOutputError(this, itemIndex, attempt, {
-                            errors: lastErrors,
-                            details: lastValidationDetails,
-                            originalRawText,
-                            latestRepairText: attempt > 1 ? lastRawText : '',
+                if (outputMode === 'text') {
+                    structured = null;
+                }
+                else {
+                    const repair = this.getNodeParameter('repair', itemIndex, {});
+                    const repairModel = resolveModelLocator(repair.model, StructuredOutputParser_1.DEFAULT_REPAIR_MODEL);
+                    const repairOutcome = await (0, StructuredOutputParser_1.evaluateStructuredOutputWithRepair)({
+                        mode: outputMode,
+                        compiledValidator: compiledSchema === null || compiledSchema === void 0 ? void 0 : compiledSchema.validator,
+                        repair: {
+                            maxAttempts: maxRepairAttempts,
+                            model: repairModel,
+                            temperature: isUnset(repair.temperature)
+                                ? StructuredOutputParser_1.DEFAULT_REPAIR_TEMPERATURE
+                                : repair.temperature,
+                            reasoningEffort: (_f = repair.reasoningEffort) !== null && _f !== void 0 ? _f : StructuredOutputParser_1.DEFAULT_REPAIR_REASONING_EFFORT,
+                            promptTemplate: repair.promptTemplate,
+                            metadata: (attempt, model) => buildMetadata(this, itemIndex, model, attempt),
+                            send: async (body) => {
+                                var _a, _b, _c, _d;
+                                const response = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
+                                    method: 'POST',
+                                    baseURL: baseUrl,
+                                    url: '/chat/completions',
+                                    headers,
+                                    json: true,
+                                    body,
+                                }));
+                                return {
+                                    response,
+                                    text: (_d = (_c = (_b = (_a = response.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) !== null && _d !== void 0 ? _d : '',
+                                };
+                            },
+                        },
+                    }, lastRawText, initialResponse);
+                    if (!repairOutcome.ok) {
+                        throw buildStructuredOutputError(this, itemIndex, 1 + repairOutcome.error.repair.repairAttempts, {
+                            errors: repairOutcome.error.validationErrors,
+                            details: repairOutcome.error.validationDetails,
+                            originalRawText: repairOutcome.error.originalRawText,
+                            latestRepairText: repairOutcome.error.repair.latestRepairText,
                         });
                     }
-                    attempt += 1;
+                    lastResponse = repairOutcome.response;
+                    structured = repairOutcome.structured;
+                    repairAttemptsUsed = repairOutcome.repair.repairAttempts;
+                    lastRawText = repairAttemptsUsed > 0 ? JSON.stringify(structured) : repairOutcome.text;
                 }
                 const reasoningParams = this.getNodeParameter('reasoning', itemIndex, {});
                 if (reasoningParams.exclude === true && (lastResponse === null || lastResponse === void 0 ? void 0 : lastResponse.choices)) {
@@ -960,7 +962,7 @@ class OpenrouterLlm {
                 if (error instanceof n8n_workflow_1.NodeOperationError) {
                     throw new n8n_workflow_1.NodeOperationError(this.getNode(), error.message, {
                         itemIndex,
-                        description: (_f = error.description) !== null && _f !== void 0 ? _f : undefined,
+                        description: (_g = error.description) !== null && _g !== void 0 ? _g : undefined,
                     });
                 }
                 throw new n8n_workflow_1.NodeApiError(this.getNode(), { message: error instanceof Error ? error.message : String(error) }, { itemIndex });
@@ -1041,51 +1043,6 @@ function buildRequestBody(executeFunctions, itemIndex, attempt = 1, outputMode =
     }
     addOptionalText(executeFunctions, body, 'session_id', sessionId, 'Session ID');
     return body;
-}
-function buildRepairRequestBody(executeFunctions, itemIndex, attempt, outputMode, failure) {
-    var _a;
-    const repair = executeFunctions.getNodeParameter('repair', itemIndex, {});
-    const model = resolveModelLocator(repair.model, DEFAULT_REPAIR_MODEL);
-    const temperature = isUnset(repair.temperature)
-        ? DEFAULT_REPAIR_TEMPERATURE
-        : repair.temperature;
-    const reasoningEffort = (_a = repair.reasoningEffort) !== null && _a !== void 0 ? _a : DEFAULT_REPAIR_REASONING_EFFORT;
-    const body = {
-        model,
-        messages: [
-            {
-                role: 'user',
-                content: buildRepairPrompt(executeFunctions, repair, outputMode, failure),
-            },
-        ],
-        metadata: buildMetadata(executeFunctions, itemIndex, model, attempt),
-        temperature,
-        reasoning: { effort: reasoningEffort },
-    };
-    body.response_format = { type: 'json_object' };
-    return body;
-}
-function buildRepairPrompt(executeFunctions, repair, outputMode, failure) {
-    const customTemplate = repair.promptTemplate;
-    const template = (customTemplate === null || customTemplate === void 0 ? void 0 : customTemplate.trim()) ? customTemplate : DEFAULT_REPAIR_PROMPT_TEMPLATE;
-    validateRepairPromptTemplate(executeFunctions, template);
-    const instructions = outputMode === 'json_schema'
-        ? 'Repair the completion so it validates against the configured JSON Schema.'
-        : 'Repair the completion so it is a non-array JSON object.';
-    return template
-        .split('{instructions}')
-        .join(instructions)
-        .split('{completion}')
-        .join(failure.completion)
-        .split('{error}')
-        .join(failure.errors.slice(0, 5).join('\n'));
-}
-function validateRepairPromptTemplate(executeFunctions, template) {
-    for (const placeholder of REQUIRED_REPAIR_PROMPT_PLACEHOLDERS) {
-        if (!template.includes(`{${placeholder}}`)) {
-            throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `Repair Prompt Template is missing required placeholder {${placeholder}}.`);
-        }
-    }
 }
 function buildHeaders(executeFunctions, itemIndex) {
     var _a, _b, _c, _d, _e;
