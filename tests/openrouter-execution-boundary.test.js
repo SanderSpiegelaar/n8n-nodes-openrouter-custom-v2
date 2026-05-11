@@ -201,6 +201,53 @@ test('OpenRouter Execution public seam repairs Structured Output through the sha
 	});
 });
 
+test('OpenRouter Execution public seam excludes reasoning fields from final response only when requested', async () => {
+	const { executeOpenRouter } = loadExecutionModule();
+	const requests = [];
+
+	const result = await executeOpenRouter({
+		input: {
+			modelRouting: { primaryModel: 'openai/gpt-4o-mini' },
+			messages: [{ role: 'user', content: 'Think privately' }],
+			outputMode: 'text',
+			reasoning: {
+				request: { effort: 'medium' },
+				excludeFromResponse: true,
+			},
+		},
+		sendChat: async (body) => {
+			requests.push(JSON.parse(JSON.stringify(body)));
+			return {
+				response: {
+					id: 'gen-1',
+					usage: { total_tokens: 12 },
+					choices: [
+						{
+							finish_reason: 'stop',
+							message: {
+								role: 'assistant',
+								content: 'Done',
+								reasoning: 'private chain',
+								reasoning_content: 'private trace',
+							},
+						},
+					],
+				},
+				text: 'Done',
+			};
+		},
+	});
+
+	assert.deepEqual(requests[0].reasoning, { effort: 'medium' });
+	assert.equal(result.kind, 'success');
+	assert.equal(result.data.response.id, 'gen-1');
+	assert.deepEqual(result.data.response.usage, { total_tokens: 12 });
+	assert.equal(result.data.response.choices[0].finish_reason, 'stop');
+	assert.equal(result.data.response.choices[0].message.content, 'Done');
+	assert.equal(result.data.response.choices[0].message.reasoning, undefined);
+	assert.equal(result.data.response.choices[0].message.reasoning_content, undefined);
+});
+
 test('OpenRouter Execution public seam returns Structured Output failure data', async () => {
 	const { executeOpenRouter } = loadExecutionModule();
 
