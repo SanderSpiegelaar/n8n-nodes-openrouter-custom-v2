@@ -2,7 +2,7 @@ import type { INodeProperties } from 'n8n-workflow';
 
 export const generationProperties: INodeProperties[] = [
 	{
-		displayName: 'Generation',
+		displayName: 'Generation Options',
 		name: 'generation',
 		type: 'collection',
 		placeholder: 'Add Generation Option',
@@ -79,6 +79,9 @@ export const generationProperties: INodeProperties[] = [
 			},
 		],
 	},
+];
+
+export const reasoningProperties: INodeProperties[] = [
 	{
 		displayName: 'Reasoning',
 		name: 'reasoning',
@@ -129,8 +132,11 @@ export const generationProperties: INodeProperties[] = [
 			},
 		],
 	},
+];
+
+export const advancedSamplingProperties: INodeProperties[] = [
 	{
-		displayName: 'Advanced Sampling',
+		displayName: 'Advanced Sampling Options',
 		name: 'advancedSampling',
 		type: 'collection',
 		placeholder: 'Add Sampling Option',

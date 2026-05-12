@@ -3,10 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.outputProperties = void 0;
 exports.outputProperties = [
     {
-        displayName: 'Output Options',
+        displayName: 'Response Options',
         name: 'outputOptions',
         type: 'collection',
-        placeholder: 'Add Output Option',
+        placeholder: 'Add Response Option',
         default: {},
         options: [
             {

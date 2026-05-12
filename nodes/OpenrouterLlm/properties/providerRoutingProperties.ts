@@ -2,7 +2,7 @@ import type { INodeProperties } from 'n8n-workflow';
 
 export const providerRoutingProperties: INodeProperties[] = [
 	{
-		displayName: 'Provider Routing',
+		displayName: 'Provider Options & Routing',
 		name: 'providerRouting',
 		type: 'collection',
 		placeholder: 'Add Routing Option',

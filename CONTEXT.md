@@ -60,7 +60,7 @@ _Avoid_: transport abstraction, HTTP client wrapper, repair sender callback
 - **Structured Output Repair** success diagnostics are **Response Details**, not default **Node Output**.
 - Previous top-level success fields such as `text`, `structured`, and `response` are outside the normal **Node Output** contract.
 - Continue On Fail items are diagnostic failure output and do not use the successful **Node Output** contract.
-- The **Node Parameter Surface** presents prompt fields before model and output-shaping fields.
+- The **Node Parameter Surface** presents prompt settings, model options with reasoning, response options with repair, provider options and routing, generation options, then advanced sampling options.
 
 ## Example dialogue
 

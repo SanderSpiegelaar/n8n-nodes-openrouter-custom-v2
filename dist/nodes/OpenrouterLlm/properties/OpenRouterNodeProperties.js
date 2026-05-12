@@ -12,11 +12,13 @@ const structuredOutputRepairProperties_1 = require("./structuredOutputRepairProp
 exports.nodeParameterSurface = [
     ...promptProperties_1.promptProperties,
     ...modelProperties_1.modelProperties,
+    ...generationProperties_1.reasoningProperties,
     ...structuredOutputProperties_1.structuredOutputProperties,
     ...outputProperties_1.outputProperties,
-    ...generationProperties_1.generationProperties,
-    ...integrationProperties_1.integrationProperties,
-    ...providerRoutingProperties_1.providerRoutingProperties,
     ...structuredOutputRepairProperties_1.structuredOutputRepairProperties,
+    ...providerRoutingProperties_1.providerRoutingProperties,
+    ...integrationProperties_1.integrationProperties,
+    ...generationProperties_1.generationProperties,
+    ...generationProperties_1.advancedSamplingProperties,
 ];
 //# sourceMappingURL=OpenRouterNodeProperties.js.map

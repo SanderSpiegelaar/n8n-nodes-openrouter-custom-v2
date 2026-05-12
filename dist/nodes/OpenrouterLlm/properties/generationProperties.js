@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generationProperties = void 0;
+exports.advancedSamplingProperties = exports.reasoningProperties = exports.generationProperties = void 0;
 exports.generationProperties = [
     {
-        displayName: 'Generation',
+        displayName: 'Generation Options',
         name: 'generation',
         type: 'collection',
         placeholder: 'Add Generation Option',
@@ -80,6 +80,8 @@ exports.generationProperties = [
             },
         ],
     },
+];
+exports.reasoningProperties = [
     {
         displayName: 'Reasoning',
         name: 'reasoning',
@@ -130,8 +132,10 @@ exports.generationProperties = [
             },
         ],
     },
+];
+exports.advancedSamplingProperties = [
     {
-        displayName: 'Advanced Sampling',
+        displayName: 'Advanced Sampling Options',
         name: 'advancedSampling',
         type: 'collection',
         placeholder: 'Add Sampling Option',

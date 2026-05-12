@@ -1,6 +1,10 @@
 import type { INodeProperties } from 'n8n-workflow';
 
-import { generationProperties } from './generationProperties';
+import {
+	advancedSamplingProperties,
+	generationProperties,
+	reasoningProperties,
+} from './generationProperties';
 import { integrationProperties } from './integrationProperties';
 import { modelProperties } from './modelProperties';
 import { outputProperties } from './outputProperties';
@@ -12,10 +16,12 @@ import { structuredOutputRepairProperties } from './structuredOutputRepairProper
 export const nodeParameterSurface: INodeProperties[] = [
 	...promptProperties,
 	...modelProperties,
+	...reasoningProperties,
 	...structuredOutputProperties,
 	...outputProperties,
-	...generationProperties,
-	...integrationProperties,
-	...providerRoutingProperties,
 	...structuredOutputRepairProperties,
+	...providerRoutingProperties,
+	...integrationProperties,
+	...generationProperties,
+	...advancedSamplingProperties,
 ];

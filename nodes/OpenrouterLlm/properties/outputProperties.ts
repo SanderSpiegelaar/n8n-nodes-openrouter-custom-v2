@@ -2,10 +2,10 @@ import type { INodeProperties } from 'n8n-workflow';
 
 export const outputProperties: INodeProperties[] = [
 	{
-		displayName: 'Output Options',
+		displayName: 'Response Options',
 		name: 'outputOptions',
 		type: 'collection',
-		placeholder: 'Add Output Option',
+		placeholder: 'Add Response Option',
 		default: {},
 		options: [
 			{

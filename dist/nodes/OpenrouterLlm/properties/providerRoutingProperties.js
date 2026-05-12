@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.providerRoutingProperties = void 0;
 exports.providerRoutingProperties = [
     {
-        displayName: 'Provider Routing',
+        displayName: 'Provider Options & Routing',
         name: 'providerRouting',
         type: 'collection',
         placeholder: 'Add Routing Option',
