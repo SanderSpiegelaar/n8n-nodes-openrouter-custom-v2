@@ -4,3 +4,5 @@ node_modules
 .claude
 .cursor
 .fallow
+.codex
+.scratch
