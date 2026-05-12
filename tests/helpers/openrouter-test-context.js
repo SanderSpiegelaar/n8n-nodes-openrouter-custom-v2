@@ -25,9 +25,17 @@ function createExecutionContext(parameters, overrides = {}) {
 				id: overrides.workflowId ?? 'workflow-1',
 				name: overrides.workflowName ?? 'Workflow One',
 			}),
-			getCredentials: async () => ({ baseUrl: 'https://openrouter.ai/api/v1' }),
+			getCredentials: async () => ({
+				baseUrl: 'https://openrouter.ai/api/v1',
+				apiKey: 'test-openrouter-api-key',
+			}),
 			continueOnFail: () => overrides.continueOnFail ?? false,
 			helpers: {
+				httpRequest: async (requestOptions) => {
+					const snapshot = JSON.parse(JSON.stringify(requestOptions));
+					requests.push(snapshot);
+					return responder(requestOptions, requests.length - 1);
+				},
 				httpRequestWithAuthentication: async (_credentialType, requestOptions) => {
 					const snapshot = JSON.parse(JSON.stringify(requestOptions));
 					requests.push(snapshot);

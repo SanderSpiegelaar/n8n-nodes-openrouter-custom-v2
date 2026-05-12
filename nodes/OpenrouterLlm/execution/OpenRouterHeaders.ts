@@ -40,3 +40,24 @@ export function buildOpenRouterHeaders(
 
 	return headers;
 }
+
+export function mergeOpenRouterAuthenticatedHeaders(
+	credentials: IDataObject,
+	requestHeaders: IDataObject,
+): IDataObject {
+	const out: IDataObject = { ...requestHeaders };
+	const rawKey = credentials.apiKey;
+	const apiKey = typeof rawKey === 'string' ? rawKey.trim() : '';
+	if (apiKey !== '') {
+		out.Authorization = `Bearer ${apiKey}`;
+	}
+	const siteUrl = credentials.siteUrl;
+	if (typeof siteUrl === 'string' && siteUrl.trim() !== '') {
+		out['HTTP-Referer'] = siteUrl.trim();
+	}
+	const appName = credentials.appName;
+	if (typeof appName === 'string' && appName.trim() !== '') {
+		out['X-OpenRouter-Title'] = appName.trim();
+	}
+	return out;
+}

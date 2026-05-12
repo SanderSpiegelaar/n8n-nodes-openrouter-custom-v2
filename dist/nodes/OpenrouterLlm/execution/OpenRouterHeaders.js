@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildOpenRouterHeaders = buildOpenRouterHeaders;
+exports.mergeOpenRouterAuthenticatedHeaders = mergeOpenRouterAuthenticatedHeaders;
 const n8n_workflow_1 = require("n8n-workflow");
 const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'];
 function buildOpenRouterHeaders(executeFunctions, itemIndex) {
@@ -23,5 +24,22 @@ function buildOpenRouterHeaders(executeFunctions, itemIndex) {
         headers[name] = (_e = header.value) !== null && _e !== void 0 ? _e : '';
     }
     return headers;
+}
+function mergeOpenRouterAuthenticatedHeaders(credentials, requestHeaders) {
+    const out = { ...requestHeaders };
+    const rawKey = credentials.apiKey;
+    const apiKey = typeof rawKey === 'string' ? rawKey.trim() : '';
+    if (apiKey !== '') {
+        out.Authorization = `Bearer ${apiKey}`;
+    }
+    const siteUrl = credentials.siteUrl;
+    if (typeof siteUrl === 'string' && siteUrl.trim() !== '') {
+        out['HTTP-Referer'] = siteUrl.trim();
+    }
+    const appName = credentials.appName;
+    if (typeof appName === 'string' && appName.trim() !== '') {
+        out['X-OpenRouter-Title'] = appName.trim();
+    }
+    return out;
 }
 //# sourceMappingURL=OpenRouterHeaders.js.map

@@ -28,9 +28,16 @@ function createExecutionContext(parameters, overrides = {}) {
 				id: overrides.workflowId ?? 'workflow-boundary',
 				name: overrides.workflowName ?? 'Boundary Workflow',
 			}),
-			getCredentials: async () => ({ baseUrl: 'https://openrouter.ai/api/v1///' }),
+			getCredentials: async () => ({
+				baseUrl: 'https://openrouter.ai/api/v1///',
+				apiKey: 'test-openrouter-api-key',
+			}),
 			continueOnFail: () => overrides.continueOnFail ?? false,
 			helpers: {
+				httpRequest: async (requestOptions) => {
+					requests.push(JSON.parse(JSON.stringify(requestOptions)));
+					return responses[requests.length - 1] ?? responses.at(-1);
+				},
 				httpRequestWithAuthentication: async (_credentialType, requestOptions) => {
 					requests.push(JSON.parse(JSON.stringify(requestOptions)));
 					return responses[requests.length - 1] ?? responses.at(-1);
@@ -293,6 +300,7 @@ test('OpenRouter Execution sends a compatible initial chat completion request th
 	assert.equal(requests[0].url, '/chat/completions');
 	assert.equal(requests[0].json, true);
 	assert.deepEqual(requests[0].headers, {
+		Authorization: 'Bearer test-openrouter-api-key',
 		'langfuse-trace-id': 'exec-boundary',
 		'X-Trace-Group': 'boundary',
 	});
