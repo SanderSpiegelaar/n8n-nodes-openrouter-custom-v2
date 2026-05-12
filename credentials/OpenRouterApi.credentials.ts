@@ -24,7 +24,8 @@ export class OpenRouterApi implements ICredentialType {
 			},
 			default: '',
 			required: true,
-			description: 'OpenRouter API key used as a Bearer token',
+			description:
+				'OpenRouter API key as a Bearer token. Paste only the secret key — do not type the literal word Bearer; that prefix is added automatically.',
 		},
 		{
 			displayName: 'Base URL',

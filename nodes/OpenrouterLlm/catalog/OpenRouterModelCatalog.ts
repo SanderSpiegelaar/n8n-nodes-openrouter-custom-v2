@@ -1,8 +1,10 @@
 import type {
+	IDataObject,
 	ILoadOptionsFunctions,
 	INodeListSearchResult,
 	INodePropertyOptions,
 } from 'n8n-workflow';
+import { mergeOpenRouterAuthenticatedHeaders } from '../execution/OpenRouterHeaders';
 
 const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
 
@@ -38,17 +40,16 @@ export async function loadOpenRouterModelCatalogOptions(
 
 async function loadOpenRouterModelCatalog(this: ILoadOptionsFunctions): Promise<OpenRouterModel[]> {
 	const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
-	const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
-	const response = (await this.helpers.httpRequestWithAuthentication.call(
-		this,
-		OPENROUTER_CUSTOM_CREDENTIAL_NAME,
-		{
-			method: 'GET',
-			baseURL: baseUrl,
-			url: '/models',
-			json: true,
-		},
-	)) as { data?: OpenRouterModel[] };
+	const creds = credentials as IDataObject;
+	const baseUrl = (creds.baseUrl as string).replace(/\/+$/, '');
+	const headers = mergeOpenRouterAuthenticatedHeaders(creds, {});
+	const response = (await this.helpers.httpRequest.call(this, {
+		method: 'GET',
+		baseURL: baseUrl,
+		url: '/models',
+		headers,
+		json: true,
+	})) as { data?: OpenRouterModel[] };
 
 	return (response.data ?? []).filter(isSelectableTextModel);
 }

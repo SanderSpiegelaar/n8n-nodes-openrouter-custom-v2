@@ -36,6 +36,8 @@ test('Openrouter LLM sends Langfuse trace headers and body metadata without cros
 
 	assert.deepEqual(requests[0].headers, {
 		Authorization: 'Bearer test-openrouter-api-key',
+		'HTTP-Referer': '',
+		'X-OpenRouter-Title': '',
 		'langfuse-trace-id': 'exec-123',
 		'X-Customer-Trace': 'trace-{{$json.id}}',
 	});
@@ -72,6 +74,8 @@ test('Openrouter LLM can disable the Langfuse trace header', async () => {
 
 	assert.deepEqual(requests[0].headers, {
 		Authorization: 'Bearer test-openrouter-api-key',
+		'HTTP-Referer': '',
+		'X-OpenRouter-Title': '',
 	});
 	assert.equal(requests[0].body.metadata.execution_id, 'exec-1');
 });

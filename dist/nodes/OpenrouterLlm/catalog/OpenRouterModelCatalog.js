@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.searchOpenRouterModelCatalog = searchOpenRouterModelCatalog;
 exports.loadOpenRouterModelCatalogOptions = loadOpenRouterModelCatalogOptions;
+const OpenRouterHeaders_1 = require("../execution/OpenRouterHeaders");
 const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
 async function searchOpenRouterModelCatalog(filter) {
     var _a;
@@ -20,11 +21,14 @@ async function loadOpenRouterModelCatalogOptions() {
 async function loadOpenRouterModelCatalog() {
     var _a;
     const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
-    const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
-    const response = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
+    const creds = credentials;
+    const baseUrl = creds.baseUrl.replace(/\/+$/, '');
+    const headers = (0, OpenRouterHeaders_1.mergeOpenRouterAuthenticatedHeaders)(creds, {});
+    const response = (await this.helpers.httpRequest.call(this, {
         method: 'GET',
         baseURL: baseUrl,
         url: '/models',
+        headers,
         json: true,
     }));
     return ((_a = response.data) !== null && _a !== void 0 ? _a : []).filter(isSelectableTextModel);

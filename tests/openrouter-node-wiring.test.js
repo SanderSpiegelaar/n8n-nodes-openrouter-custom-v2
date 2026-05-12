@@ -81,35 +81,39 @@ test('OpenRouter model catalog loads shared sorted text model options for lists 
 		searchOpenRouterModelCatalog,
 	} = require('../dist/nodes/OpenrouterLlm/catalog/OpenRouterModelCatalog.js');
 	const requests = [];
+	const sharedPayload = () => ({
+		data: [
+			{
+				id: 'z/provider-model',
+				name: 'Provider Model',
+				architecture: { output_modalities: ['text'] },
+			},
+			{
+				id: 'image/model',
+				name: 'Image Model',
+				architecture: { output_modalities: ['image'] },
+			},
+			{
+				id: 'openrouter/auto',
+				name: 'Auto Router',
+				architecture: { output_modalities: ['text'] },
+			},
+			{
+				id: 'anthropic/claude-3-haiku',
+				name: 'Claude 3 Haiku',
+				architecture: { output_modalities: ['text'] },
+			},
+		],
+	});
 	const context = {
-		getCredentials: async () => ({ baseUrl: 'https://openrouter.ai/api/v1///' }),
+		getCredentials: async () => ({
+			baseUrl: 'https://openrouter.ai/api/v1///',
+			apiKey: 'test-catalog-key',
+		}),
 		helpers: {
-			httpRequestWithAuthentication: async (_credentialType, requestOptions) => {
+			httpRequest: async (requestOptions) => {
 				requests.push(requestOptions);
-				return {
-					data: [
-						{
-							id: 'z/provider-model',
-							name: 'Provider Model',
-							architecture: { output_modalities: ['text'] },
-						},
-						{
-							id: 'image/model',
-							name: 'Image Model',
-							architecture: { output_modalities: ['image'] },
-						},
-						{
-							id: 'openrouter/auto',
-							name: 'Auto Router',
-							architecture: { output_modalities: ['text'] },
-						},
-						{
-							id: 'anthropic/claude-3-haiku',
-							name: 'Claude 3 Haiku',
-							architecture: { output_modalities: ['text'] },
-						},
-					],
-				};
+				return sharedPayload();
 			},
 		},
 	};
@@ -135,30 +139,34 @@ test('Openrouter LLM loads searchable text model options from OpenRouter', async
 	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
 	const node = new OpenrouterLlm();
 	const requests = [];
+	const sharedPayload = () => ({
+		data: [
+			{
+				id: 'openai/gpt-4o-mini',
+				name: 'GPT-4o Mini',
+				architecture: { output_modalities: ['text'] },
+			},
+			{
+				id: 'image/model',
+				name: 'Image Model',
+				architecture: { output_modalities: ['image'] },
+			},
+			{
+				id: 'openrouter/auto',
+				name: 'Auto Router',
+				architecture: { output_modalities: ['text'] },
+			},
+		],
+	});
 	const context = {
-		getCredentials: async () => ({ baseUrl: 'https://openrouter.ai/api/v1' }),
+		getCredentials: async () => ({
+			baseUrl: 'https://openrouter.ai/api/v1',
+			apiKey: 'test-catalog-key',
+		}),
 		helpers: {
-			httpRequestWithAuthentication: async (_credentialType, requestOptions) => {
+			httpRequest: async (requestOptions) => {
 				requests.push(requestOptions);
-				return {
-					data: [
-						{
-							id: 'openai/gpt-4o-mini',
-							name: 'GPT-4o Mini',
-							architecture: { output_modalities: ['text'] },
-						},
-						{
-							id: 'image/model',
-							name: 'Image Model',
-							architecture: { output_modalities: ['image'] },
-						},
-						{
-							id: 'openrouter/auto',
-							name: 'Auto Router',
-							architecture: { output_modalities: ['text'] },
-						},
-					],
-				};
+				return sharedPayload();
 			},
 		},
 	};

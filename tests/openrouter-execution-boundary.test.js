@@ -301,6 +301,8 @@ test('OpenRouter Execution sends a compatible initial chat completion request th
 	assert.equal(requests[0].json, true);
 	assert.deepEqual(requests[0].headers, {
 		Authorization: 'Bearer test-openrouter-api-key',
+		'HTTP-Referer': '',
+		'X-OpenRouter-Title': '',
 		'langfuse-trace-id': 'exec-boundary',
 		'X-Trace-Group': 'boundary',
 	});

@@ -116,9 +116,9 @@ async function executeItem(executeFunctions, itemIndex) {
 }
 function createOpenRouterChatSender(executeFunctions, baseUrl, headers, credentials, itemIndex) {
     return async (body) => {
-        var _a, _b, _c, _d, _e, _f;
-        const rawKey = credentials.apiKey;
-        if (typeof rawKey !== 'string' || rawKey.trim() === '') {
+        var _a, _b, _c, _d, _e, _f, _g;
+        const normalizedKey = (0, OpenRouterHeaders_1.normalizeOpenRouterApiKey)(credentials.apiKey);
+        if (normalizedKey === '') {
             throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'OpenRouter API key is missing or empty.', {
                 itemIndex,
             });
@@ -133,13 +133,16 @@ function createOpenRouterChatSender(executeFunctions, baseUrl, headers, credenti
             body: JSON.stringify({
                 sessionId: 'b0c2f0',
                 runId: 'post-fix',
-                hypothesisId: 'A',
+                hypothesisId: 'G',
                 location: 'OpenrouterLlm.node.ts:createOpenRouterChatSender:before',
                 message: 'POST /chat/completions request context',
                 data: {
                     baseUrlSegmentCount: baseUrl.split('/').length,
                     extraHeaderKeys: Object.keys(headers),
-                    hasBearerAuthorization: mergedHeaders.Authorization === `Bearer ${rawKey.trim()}`,
+                    hasBearerAuthorization: mergedHeaders.Authorization === `Bearer ${normalizedKey}`,
+                    refererIsEmptyString: mergedHeaders['HTTP-Referer'] === '',
+                    titleHeaderIsEmptyString: mergedHeaders['X-OpenRouter-Title'] === '',
+                    rawKeyHadBearerWord: /^bearer\s+/i.test(String((_a = credentials.apiKey) !== null && _a !== void 0 ? _a : '').trim()),
                     hasBodyModel: typeof body.model === 'string',
                     hasBodyModelsArray: Array.isArray(body.models),
                 },
@@ -189,11 +192,11 @@ function createOpenRouterChatSender(executeFunctions, baseUrl, headers, credenti
                     message: 'chat completions failed',
                     data: {
                         errorName: unknownError instanceof Error ? unknownError.constructor.name : typeof unknownError,
-                        httpCodeInstance: (_a = apiErr === null || apiErr === void 0 ? void 0 : apiErr.httpCode) !== null && _a !== void 0 ? _a : null,
+                        httpCodeInstance: (_b = apiErr === null || apiErr === void 0 ? void 0 : apiErr.httpCode) !== null && _b !== void 0 ? _b : null,
                         httpCodeDuck: unknownError !== null &&
                             typeof unknownError === 'object' &&
                             'httpCode' in unknownError
-                            ? String((_b = unknownError.httpCode) !== null && _b !== void 0 ? _b : '')
+                            ? String((_c = unknownError.httpCode) !== null && _c !== void 0 ? _c : '')
                             : null,
                         errMessage: unknownError instanceof Error ? unknownError.message.substring(0, 200) : String(unknownError),
                     },
@@ -204,7 +207,7 @@ function createOpenRouterChatSender(executeFunctions, baseUrl, headers, credenti
         }
         return {
             response,
-            text: (_f = (_e = (_d = (_c = response.choices) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.message) === null || _e === void 0 ? void 0 : _e.content) !== null && _f !== void 0 ? _f : '',
+            text: (_g = (_f = (_e = (_d = response.choices) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.message) === null || _f === void 0 ? void 0 : _f.content) !== null && _g !== void 0 ? _g : '',
         };
     };
 }
@@ -240,6 +243,14 @@ function rethrowAsN8nError(executeFunctions, error, itemIndex) {
         Object.prototype.hasOwnProperty.call(error, 'httpCode');
     if (looksLikeForeignNodeApiError) {
         throw error;
+    }
+    if (typeof error === 'object' && error !== null && 'isAxiosError' in error) {
+        const axiosish = error;
+        if (axiosish.isAxiosError === true) {
+            throw new n8n_workflow_1.NodeApiError(executeFunctions.getNode(), axiosish, {
+                itemIndex,
+            });
+        }
     }
     throw new n8n_workflow_1.NodeApiError(executeFunctions.getNode(), { message: error instanceof Error ? error.message : String(error) }, { itemIndex });
 }

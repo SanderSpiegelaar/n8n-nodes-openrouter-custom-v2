@@ -1,8 +1,20 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.normalizeOpenRouterApiKey = normalizeOpenRouterApiKey;
 exports.buildOpenRouterHeaders = buildOpenRouterHeaders;
 exports.mergeOpenRouterAuthenticatedHeaders = mergeOpenRouterAuthenticatedHeaders;
 const n8n_workflow_1 = require("n8n-workflow");
+const ZERO_WIDTH_CHARS = /\uFEFF|[\u200B-\u200D]/gu;
+function normalizeOpenRouterApiKey(raw) {
+    if (typeof raw !== 'string') {
+        return '';
+    }
+    let trimmed = raw.trim().replace(ZERO_WIDTH_CHARS, '');
+    while (/^bearer\s+/i.test(trimmed)) {
+        trimmed = trimmed.replace(/^bearer\s+/i, '').trim();
+    }
+    return trimmed;
+}
 const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'];
 function buildOpenRouterHeaders(executeFunctions, itemIndex) {
     var _a, _b, _c, _d, _e;
@@ -27,19 +39,14 @@ function buildOpenRouterHeaders(executeFunctions, itemIndex) {
 }
 function mergeOpenRouterAuthenticatedHeaders(credentials, requestHeaders) {
     const out = { ...requestHeaders };
-    const rawKey = credentials.apiKey;
-    const apiKey = typeof rawKey === 'string' ? rawKey.trim() : '';
+    const apiKey = normalizeOpenRouterApiKey(credentials.apiKey);
     if (apiKey !== '') {
         out.Authorization = `Bearer ${apiKey}`;
     }
     const siteUrl = credentials.siteUrl;
-    if (typeof siteUrl === 'string' && siteUrl.trim() !== '') {
-        out['HTTP-Referer'] = siteUrl.trim();
-    }
+    out['HTTP-Referer'] = typeof siteUrl === 'string' ? siteUrl.trim().replace(ZERO_WIDTH_CHARS, '') : '';
     const appName = credentials.appName;
-    if (typeof appName === 'string' && appName.trim() !== '') {
-        out['X-OpenRouter-Title'] = appName.trim();
-    }
+    out['X-OpenRouter-Title'] = typeof appName === 'string' ? appName.trim().replace(ZERO_WIDTH_CHARS, '') : '';
     return out;
 }
 //# sourceMappingURL=OpenRouterHeaders.js.map

@@ -4,6 +4,7 @@ import type {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
 } from 'n8n-workflow';
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { type StructuredOutputMode } from './structured-output/StructuredOutputParser';
@@ -28,7 +29,7 @@ import {
 	compileSchema,
 	getStructuredOutputDiagnosticFields,
 } from './structured-output/StructuredOutputNodeAdapter';
-import { buildOpenRouterHeaders, mergeOpenRouterAuthenticatedHeaders } from './execution/OpenRouterHeaders';
+import { buildOpenRouterHeaders, mergeOpenRouterAuthenticatedHeaders, normalizeOpenRouterApiKey } from './execution/OpenRouterHeaders';
 
 const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
 
@@ -175,8 +176,8 @@ function createOpenRouterChatSender(
 	itemIndex: number,
 ): OpenRouterChatSender {
 	return async (body) => {
-		const rawKey = credentials.apiKey;
-		if (typeof rawKey !== 'string' || rawKey.trim() === '') {
+		const normalizedKey = normalizeOpenRouterApiKey(credentials.apiKey);
+		if (normalizedKey === '') {
 			throw new NodeOperationError(executeFunctions.getNode(), 'OpenRouter API key is missing or empty.', {
 				itemIndex,
 			});
@@ -192,13 +193,16 @@ function createOpenRouterChatSender(
 			body: JSON.stringify({
 				sessionId: 'b0c2f0',
 				runId: 'post-fix',
-				hypothesisId: 'A',
+				hypothesisId: 'G',
 				location: 'OpenrouterLlm.node.ts:createOpenRouterChatSender:before',
 				message: 'POST /chat/completions request context',
 				data: {
 					baseUrlSegmentCount: baseUrl.split('/').length,
 					extraHeaderKeys: Object.keys(headers),
-					hasBearerAuthorization: mergedHeaders.Authorization === `Bearer ${rawKey.trim()}`,
+					hasBearerAuthorization: mergedHeaders.Authorization === `Bearer ${normalizedKey}`,
+					refererIsEmptyString: mergedHeaders['HTTP-Referer'] === '',
+					titleHeaderIsEmptyString: mergedHeaders['X-OpenRouter-Title'] === '',
+					rawKeyHadBearerWord: /^bearer\s+/i.test(String(credentials.apiKey ?? '').trim()),
 					hasBodyModel: typeof (body as { model?: unknown }).model === 'string',
 					hasBodyModelsArray: Array.isArray((body as { models?: unknown }).models),
 				},
@@ -323,6 +327,15 @@ function rethrowAsN8nError(
 
 	if (looksLikeForeignNodeApiError) {
 		throw error;
+	}
+
+	if (typeof error === 'object' && error !== null && 'isAxiosError' in error) {
+		const axiosish = error as IDataObject & { isAxiosError?: boolean };
+		if (axiosish.isAxiosError === true) {
+			throw new NodeApiError(executeFunctions.getNode(), axiosish as unknown as JsonObject, {
+				itemIndex,
+			});
+		}
 	}
 
 	throw new NodeApiError(
