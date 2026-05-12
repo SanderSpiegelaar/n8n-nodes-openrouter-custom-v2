@@ -323,7 +323,7 @@ test('OpenRouter Execution sends a compatible initial chat completion request th
 	assert.equal(requests[0].body.metadata.validation_attempt, 1);
 	assert.equal(requests[0].body.metadata.tenant, 'acme');
 	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'response_format'), false);
-	assert.equal(result[0][0].json.text, 'Done');
+	assert.deepEqual(result[0][0].json, { output: 'Done' });
 	assert.deepEqual(result[0][0].pairedItem, { item: 0 });
 });
 
@@ -365,10 +365,5 @@ test('OpenRouter Execution keeps structured repair requests compatible while ret
 	assert.equal(requests[1].body.messages[0].role, 'user');
 	assert.match(requests[1].body.messages[0].content, /not json/);
 	assert.match(requests[1].body.messages[0].content, /Validation error/i);
-	assert.deepEqual(result[0][0].json.structured, { ok: true });
-	assert.equal(result[0][0].json.text, '{"ok":true}');
-	assert.deepEqual(result[0][0].json.structuredOutputRepair, {
-		repaired: true,
-		repairAttempts: 1,
-	});
+	assert.deepEqual(result[0][0].json, { output: { ok: true } });
 });

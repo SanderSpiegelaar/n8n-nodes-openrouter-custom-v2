@@ -19,20 +19,21 @@ test('OpenRouter node properties expose the expected high-level parameter order'
 	assert.deepEqual(
 		nodeParameterSurface.map((property) => property.name),
 		[
-			'model',
-			'modelOptions',
 			'promptMode',
 			'systemMessage',
 			'prompt',
 			'singlePrompt',
 			'messagesJson',
+			'model',
+			'modelOptions',
+			'outputMode',
+			'jsonSchema',
+			'outputOptions',
 			'generation',
 			'reasoning',
 			'advancedSampling',
 			'integrations',
 			'providerRouting',
-			'outputMode',
-			'jsonSchema',
 			'maxValidationAttempts',
 			'repair',
 		],
@@ -44,6 +45,7 @@ test('OpenRouter node properties keep key defaults unchanged', () => {
 	const model = findProperty(nodeParameterSurface, 'model');
 	const promptMode = findProperty(nodeParameterSurface, 'promptMode');
 	const outputMode = findProperty(nodeParameterSurface, 'outputMode');
+	const outputOptions = findProperty(nodeParameterSurface, 'outputOptions');
 	const maxValidationAttempts = findProperty(nodeParameterSurface, 'maxValidationAttempts');
 	const repair = findProperty(nodeParameterSurface, 'repair');
 	const repairModel = findOption(repair, 'model');
@@ -53,6 +55,7 @@ test('OpenRouter node properties keep key defaults unchanged', () => {
 	assert.deepEqual(model.default, { mode: 'list', value: 'openai/gpt-oss-120b' });
 	assert.equal(promptMode.default, 'systemUser');
 	assert.equal(outputMode.default, 'text');
+	assert.equal(findOption(outputOptions, 'includeResponseDetails').default, false);
 	assert.equal(maxValidationAttempts.default, 2);
 	assert.deepEqual(repairModel.default, { mode: 'list', value: 'openai/gpt-oss-120b:nitro' });
 	assert.equal(repairReasoningEffort.default, 'none');

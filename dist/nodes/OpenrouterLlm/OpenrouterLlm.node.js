@@ -49,7 +49,7 @@ class OpenrouterLlm {
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
             try {
                 const data = await executeItem(this, itemIndex);
-                returnData.push(toN8nOutputItem(data, itemIndex));
+                returnData.push(toN8nOutputItem(this, data, itemIndex));
             }
             catch (error) {
                 if (this.continueOnFail()) {
@@ -203,7 +203,7 @@ function createOpenRouterChatSender(executeFunctions, baseUrl, headers, credenti
                     timestamp: Date.now(),
                 }),
             }).catch(() => { });
-            throw unknownError;
+            throw toOpenRouterRequestError(executeFunctions, unknownError, itemIndex);
         }
         return {
             response,
@@ -211,9 +211,29 @@ function createOpenRouterChatSender(executeFunctions, baseUrl, headers, credenti
         };
     };
 }
-function toN8nOutputItem(data, itemIndex) {
+function toOpenRouterRequestError(executeFunctions, error, itemIndex) {
+    if (error instanceof n8n_workflow_1.NodeApiError) {
+        return error;
+    }
+    if (typeof error === 'object' && error !== null && 'isAxiosError' in error) {
+        return new n8n_workflow_1.NodeApiError(executeFunctions.getNode(), error, { itemIndex });
+    }
+    return new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), error instanceof Error ? error.message : String(error), { itemIndex });
+}
+function toN8nOutputItem(executeFunctions, data, itemIndex) {
+    var _a;
+    const outputOptions = executeFunctions.getNodeParameter('outputOptions', itemIndex, {});
+    const json = {
+        output: (_a = data.structured) !== null && _a !== void 0 ? _a : data.text,
+    };
+    if (outputOptions.includeResponseDetails === true) {
+        json.response = data.response;
+        if (data.structuredOutputRepair !== undefined) {
+            json.structuredOutputRepair = data.structuredOutputRepair;
+        }
+    }
     return {
-        json: data,
+        json,
         pairedItem: { item: itemIndex },
     };
 }

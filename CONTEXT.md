@@ -24,6 +24,14 @@ _Avoid_: Model options API, model list service
 The n8n-visible fields that configure an OpenRouter Execution. The n8n adapter normalizes these fields into plain Structured Output configuration before invoking Structured Output behavior.
 _Avoid_: UI config, properties blob
 
+**Node Output**:
+The single successful workflow item field named `output`, containing assistant text in Text mode or validated JSON in Structured Output modes.
+_Avoid_: response payload, result object
+
+**Response Details**:
+Optional raw OpenRouter response and repair diagnostic data included in successful workflow item output for debugging or downstream inspection.
+_Avoid_: metadata, request metadata
+
 **n8n adapter module**:
 The n8n-facing module that owns node description composition, parameter reads, credentials, n8n HTTP helper usage, Continue On Fail behavior, and final workflow output shaping.
 _Avoid_: Monolith node file, god module
@@ -46,6 +54,13 @@ _Avoid_: transport abstraction, HTTP client wrapper, repair sender callback
 - **Structured Output Repair** requests reuse the **OpenRouter chat sender callback** after the initial response fails local validation.
 - The **Node Parameter Surface** configures **OpenRouter Execution**, **Structured Output**, and **Structured Output Repair**.
 - The **OpenRouter Model Catalog** supplies selectable models for the **Node Parameter Surface**.
+- The **n8n adapter module** translates successful **OpenRouter Execution** data into **Node Output**.
+- **Node Output** has exactly one default successful field, `output`.
+- **Response Details** may be included alongside **Node Output** only when the **Node Parameter Surface** explicitly enables them.
+- **Structured Output Repair** success diagnostics are **Response Details**, not default **Node Output**.
+- Previous top-level success fields such as `text`, `structured`, and `response` are outside the normal **Node Output** contract.
+- Continue On Fail items are diagnostic failure output and do not use the successful **Node Output** contract.
+- The **Node Parameter Surface** presents prompt fields before model and output-shaping fields.
 
 ## Example dialogue
 
@@ -56,3 +71,5 @@ _Avoid_: transport abstraction, HTTP client wrapper, repair sender callback
 
 - "retry" can mean retrying the original model prompt or running **Structured Output Repair**. Use **Structured Output Repair** when the request is a JSON-fixing follow-up call.
 - "validation attempt" previously mixed the initial response with repair calls. Use **Structured Output Repair** count for repair calls after the initial response.
+- "output" means the successful workflow item field named `output`, not the complete OpenRouter response or Structured Output diagnostics.
+- "metadata" means request metadata sent to OpenRouter; returned raw response data is **Response Details**.

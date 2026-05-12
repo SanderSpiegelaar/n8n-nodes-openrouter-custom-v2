@@ -155,6 +155,7 @@ test('Openrouter LLM sends repair defaults on the second structured-output reque
 			prompt: 'Hello',
 			generation: { temperature: 0.8, maxTokens: 100 },
 			outputMode: 'json_object',
+			outputOptions: { includeResponseDetails: true },
 			maxValidationAttempts: 1,
 		},
 		{
@@ -173,8 +174,8 @@ test('Openrouter LLM sends repair defaults on the second structured-output reque
 	assert.deepEqual(requests[1].body.reasoning, { effort: 'none' });
 	assert.match(requests[1].body.messages[0].content, /not json at all/);
 	assert.match(requests[1].body.messages[0].content, /Validation error/i);
-	assert.deepEqual(result[0][0].json.structured, { answer: 7 });
-	assert.equal(result[0][0].json.text, '{"answer":7}');
+	assert.deepEqual(result[0][0].json.output, { answer: 7 });
+	assert.equal(result[0][0].json.response.id, 'gen-2');
 	assert.deepEqual(result[0][0].json.structuredOutputRepair, {
 		repaired: true,
 		repairAttempts: 1,
@@ -247,12 +248,7 @@ test('Openrouter LLM repairs invalid json_schema output with a JSON Object repai
 		json_schema: { name: 'response', schema, strict: true },
 	});
 	assert.deepEqual(requests[1].body.response_format, { type: 'json_object' });
-	assert.deepEqual(result[0][0].json.structured, { answer: 7 });
-	assert.equal(result[0][0].json.text, '{"answer":7}');
-	assert.deepEqual(result[0][0].json.structuredOutputRepair, {
-		repaired: true,
-		repairAttempts: 1,
-	});
+	assert.deepEqual(result[0][0].json, { output: { answer: 7 } });
 });
 
 
@@ -286,7 +282,7 @@ test('Openrouter LLM retries once with a corrective system message and succeeds 
 	assert.equal(requests[1].body.messages[0].role, 'user');
 	assert.match(requests[1].body.messages[0].content, /Validation error/i);
 	assert.match(requests[1].body.messages[0].content, /Return only the corrected JSON/i);
-	assert.deepEqual(result[0][0].json.structured, { answer: 7 });
+	assert.deepEqual(result[0][0].json, { output: { answer: 7 } });
 });
 
 

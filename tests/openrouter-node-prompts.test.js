@@ -38,8 +38,7 @@ test('Openrouter LLM posts one chat completion request per input item', async ()
 		temperature: 0.2,
 		max_tokens: 100,
 	});
-	assert.equal(result[0][0].json.text, 'Done');
-	assert.equal(result[0][0].json.response.id, 'gen-1');
+	assert.deepEqual(result[0][0].json, { output: 'Done' });
 	assert.deepEqual(result[0][0].pairedItem, { item: 0 });
 });
 
@@ -173,4 +172,3 @@ test('Openrouter LLM rejects empty prompts and message content before making a r
 	assert.match(emptyMessagesResult[0][0].json.error, /must contain at least one message/i);
 	assert.match(emptyMessageContentResult[0][0].json.error, /message 1 content must not be empty/i);
 });
-

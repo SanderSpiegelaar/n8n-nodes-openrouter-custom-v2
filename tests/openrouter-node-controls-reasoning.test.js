@@ -199,6 +199,7 @@ test('Exclude reasoning strips reasoning fields from response output', async () 
 			prompt: 'Hello',
 			generation: { temperature: 0.2 },
 			reasoning: { mode: 'effort', effort: 'medium', exclude: true },
+			outputOptions: { includeResponseDetails: true },
 		},
 		{
 			responder: () => ({
@@ -220,8 +221,8 @@ test('Exclude reasoning strips reasoning fields from response output', async () 
 	const result = await node.execute.call(context);
 	const responseChoices = result[0][0].json.response.choices;
 
+	assert.equal(result[0][0].json.output, 'The answer is 42.');
 	assert.equal(responseChoices[0].message.content, 'The answer is 42.');
 	assert.equal(responseChoices[0].message.reasoning, undefined);
 	assert.equal(responseChoices[0].message.reasoning_content, undefined);
 });
-

@@ -75,7 +75,7 @@ export class OpenrouterLlm implements INodeType {
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
 				const data = await executeItem(this, itemIndex);
-				returnData.push(toN8nOutputItem(data, itemIndex));
+				returnData.push(toN8nOutputItem(this, data, itemIndex));
 			} catch (error) {
 				if (this.continueOnFail()) {
 					returnData.push(toContinueOnFailOutputItem(error, itemIndex));
@@ -275,7 +275,7 @@ function createOpenRouterChatSender(
 			}).catch(() => {});
 			// #endregion
 
-			throw unknownError;
+			throw toOpenRouterRequestError(executeFunctions, unknownError, itemIndex);
 		}
 
 		return {
@@ -285,9 +285,50 @@ function createOpenRouterChatSender(
 	};
 }
 
-function toN8nOutputItem(data: OpenRouterExecutionData, itemIndex: number): INodeExecutionData {
+function toOpenRouterRequestError(
+	executeFunctions: IExecuteFunctions,
+	error: unknown,
+	itemIndex: number,
+): NodeApiError | NodeOperationError {
+	if (error instanceof NodeApiError) {
+		return error;
+	}
+
+	if (typeof error === 'object' && error !== null && 'isAxiosError' in error) {
+		return new NodeApiError(executeFunctions.getNode(), error as JsonObject, { itemIndex });
+	}
+
+	return new NodeOperationError(
+		executeFunctions.getNode(),
+		error instanceof Error ? error.message : String(error),
+		{ itemIndex },
+	);
+}
+
+function toN8nOutputItem(
+	executeFunctions: IExecuteFunctions,
+	data: OpenRouterExecutionData,
+	itemIndex: number,
+): INodeExecutionData {
+	const outputOptions = executeFunctions.getNodeParameter(
+		'outputOptions',
+		itemIndex,
+		{},
+	) as IDataObject;
+	const json = {
+		output: data.structured ?? data.text,
+	} as IDataObject;
+
+	if ((outputOptions.includeResponseDetails as boolean | undefined) === true) {
+		json.response = data.response as IDataObject;
+
+		if (data.structuredOutputRepair !== undefined) {
+			json.structuredOutputRepair = data.structuredOutputRepair as IDataObject;
+		}
+	}
+
 	return {
-		json: data as IDataObject,
+		json,
 		pairedItem: { item: itemIndex },
 	};
 }

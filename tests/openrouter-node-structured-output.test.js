@@ -25,7 +25,7 @@ test('Openrouter LLM in json_object mode sends response_format and returns parse
 
 	assert.deepEqual(requests[0].body.response_format, { type: 'json_object' });
 	assert.equal(requests.length, 1);
-	assert.deepEqual(result[0][0].json.structured, { answer: 42 });
+	assert.deepEqual(result[0][0].json, { output: { answer: 42 } });
 	assert.equal(requests[0].body.metadata.validation_attempt, 1);
 });
 
@@ -288,7 +288,7 @@ test('Openrouter LLM in json_schema mode sends strict json_schema response_forma
 		type: 'json_schema',
 		json_schema: { name: 'response', schema, strict: true },
 	});
-	assert.deepEqual(result[0][0].json.structured, { email: 'a@b.co' });
+	assert.deepEqual(result[0][0].json, { output: { email: 'a@b.co' } });
 });
 
 
@@ -352,7 +352,7 @@ test('Openrouter LLM in json_schema mode allows array roots when schema allows a
 
 	const result = await node.execute.call(context);
 
-	assert.deepEqual(result[0][0].json.structured, [1, 2, 3]);
+	assert.deepEqual(result[0][0].json, { output: [1, 2, 3] });
 });
 
 
@@ -415,7 +415,7 @@ test('structured schema validation messages name missing fields and keep technic
 });
 
 
-test('Openrouter LLM in text output mode omits response_format and returns structured null', async () => {
+test('Openrouter LLM in text output mode omits response_format and returns text output', async () => {
 	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
 	const node = new OpenrouterLlm();
 	const { context, requests } = createExecutionContext({
@@ -427,5 +427,5 @@ test('Openrouter LLM in text output mode omits response_format and returns struc
 	const result = await node.execute.call(context);
 
 	assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'response_format'), false);
-	assert.equal(result[0][0].json.structured, null);
+	assert.deepEqual(result[0][0].json, { output: 'Done' });
 });
