@@ -1,6 +1,6 @@
 # TODO
 
-- [ ] Prepopulate the Structured Output Prompt Template with the default prompt
+- [x] Prepopulate the Structured Output Prompt Template with the default prompt
 - [x] Rename node output to `output` and:
   - [x] disable default output of text and structured (only output)
   - [x] remove default output of response

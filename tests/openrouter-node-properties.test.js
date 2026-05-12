@@ -49,8 +49,10 @@ test('OpenRouter node properties keep key defaults unchanged', () => {
 	const maxValidationAttempts = findProperty(nodeParameterSurface, 'maxValidationAttempts');
 	const repair = findProperty(nodeParameterSurface, 'repair');
 	const repairModel = findOption(repair, 'model');
+	const repairPromptTemplate = findOption(repair, 'promptTemplate');
 	const repairReasoningEffort = findOption(repair, 'reasoningEffort');
 	const repairTemperature = findOption(repair, 'temperature');
+	const { DEFAULT_REPAIR_PROMPT_TEMPLATE } = require('../dist/nodes/OpenrouterLlm/structured-output/StructuredOutputParser.js');
 
 	assert.deepEqual(model.default, { mode: 'list', value: 'openai/gpt-oss-120b' });
 	assert.equal(promptMode.default, 'systemUser');
@@ -58,6 +60,7 @@ test('OpenRouter node properties keep key defaults unchanged', () => {
 	assert.equal(findOption(outputOptions, 'includeResponseDetails').default, false);
 	assert.equal(maxValidationAttempts.default, 2);
 	assert.deepEqual(repairModel.default, { mode: 'list', value: 'openai/gpt-oss-120b:nitro' });
+	assert.equal(repairPromptTemplate.default, DEFAULT_REPAIR_PROMPT_TEMPLATE);
 	assert.equal(repairReasoningEffort.default, 'none');
 	assert.equal(repairTemperature.default, 0.1);
 });

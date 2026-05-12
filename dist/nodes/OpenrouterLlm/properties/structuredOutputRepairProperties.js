@@ -59,7 +59,7 @@ exports.structuredOutputRepairProperties = [
                 name: 'promptTemplate',
                 type: 'string',
                 typeOptions: { rows: 8 },
-                default: '',
+                default: StructuredOutputParser_1.DEFAULT_REPAIR_PROMPT_TEMPLATE,
                 description: 'Custom repair prompt. Must include {instructions}, {completion}, and {error}. Empty uses the default template.',
             },
             {

@@ -2,6 +2,7 @@ import type { INodeProperties } from 'n8n-workflow';
 
 import {
 	DEFAULT_REPAIR_MODEL,
+	DEFAULT_REPAIR_PROMPT_TEMPLATE,
 	DEFAULT_REPAIR_REASONING_EFFORT,
 	DEFAULT_REPAIR_TEMPERATURE,
 } from '../structured-output/StructuredOutputParser';
@@ -63,7 +64,7 @@ export const structuredOutputRepairProperties: INodeProperties[] = [
 				name: 'promptTemplate',
 				type: 'string',
 				typeOptions: { rows: 8 },
-				default: '',
+				default: DEFAULT_REPAIR_PROMPT_TEMPLATE,
 				description:
 					'Custom repair prompt. Must include {instructions}, {completion}, and {error}. Empty uses the default template.',
 			},
