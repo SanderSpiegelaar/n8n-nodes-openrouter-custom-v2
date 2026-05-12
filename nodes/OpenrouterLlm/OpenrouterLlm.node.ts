@@ -98,33 +98,6 @@ async function executeItem(
 ): Promise<OpenRouterExecutionData> {
 	const credentials = await executeFunctions.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
 	const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
-	const apiKeyRaw = credentials.apiKey as string | undefined;
-
-	// #region agent log
-	fetch('http://127.0.0.1:7559/ingest/98d5d16e-797c-4efe-89ed-798c24cf5fec', {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'X-Debug-Session-Id': 'b0c2f0',
-		},
-		body: JSON.stringify({
-			sessionId: 'b0c2f0',
-			runId: 'post-fix',
-			hypothesisId: 'B-C-E',
-			location: 'OpenrouterLlm.node.ts:executeItem:credentials',
-			message: 'executeItem credentials snapshot',
-			data: {
-				baseUrlLength: baseUrl.length,
-				baseUrlEndsWithChat: baseUrl.endsWith('/chat/completions'),
-				apiKeyDefined: typeof apiKeyRaw === 'string',
-				apiKeyLength: typeof apiKeyRaw === 'string' ? apiKeyRaw.trim().length : 0,
-				siteUrlLength: typeof credentials.siteUrl === 'string' ? credentials.siteUrl.trim().length : 0,
-				appNameLength: typeof credentials.appName === 'string' ? credentials.appName.trim().length : 0,
-			},
-			timestamp: Date.now(),
-		}),
-	}).catch(() => {});
-	// #endregion
 
 	const modelVariant = getSelectedModelVariant(executeFunctions, itemIndex);
 	const outputMode = executeFunctions.getNodeParameter('outputMode', itemIndex, 'text') as OutputMode;
@@ -183,33 +156,6 @@ function createOpenRouterChatSender(
 			});
 		}
 		const mergedHeaders = mergeOpenRouterAuthenticatedHeaders(credentials, headers);
-		// #region agent log
-		fetch('http://127.0.0.1:7559/ingest/98d5d16e-797c-4efe-89ed-798c24cf5fec', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'X-Debug-Session-Id': 'b0c2f0',
-			},
-			body: JSON.stringify({
-				sessionId: 'b0c2f0',
-				runId: 'post-fix',
-				hypothesisId: 'G',
-				location: 'OpenrouterLlm.node.ts:createOpenRouterChatSender:before',
-				message: 'POST /chat/completions request context',
-				data: {
-					baseUrlSegmentCount: baseUrl.split('/').length,
-					extraHeaderKeys: Object.keys(headers),
-					hasBearerAuthorization: mergedHeaders.Authorization === `Bearer ${normalizedKey}`,
-					refererIsEmptyString: mergedHeaders['HTTP-Referer'] === '',
-					titleHeaderIsEmptyString: mergedHeaders['X-OpenRouter-Title'] === '',
-					rawKeyHadBearerWord: /^bearer\s+/i.test(String(credentials.apiKey ?? '').trim()),
-					hasBodyModel: typeof (body as { model?: unknown }).model === 'string',
-					hasBodyModelsArray: Array.isArray((body as { models?: unknown }).models),
-				},
-				timestamp: Date.now(),
-			}),
-		}).catch(() => {});
-		// #endregion
 
 		let response: ChatCompletionResponse;
 
@@ -222,59 +168,7 @@ function createOpenRouterChatSender(
 				json: true,
 				body,
 			})) as ChatCompletionResponse;
-
-			// #region agent log
-			fetch('http://127.0.0.1:7559/ingest/98d5d16e-797c-4efe-89ed-798c24cf5fec', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'X-Debug-Session-Id': 'b0c2f0',
-				},
-				body: JSON.stringify({
-					sessionId: 'b0c2f0',
-					runId: 'post-fix',
-					hypothesisId: 'D',
-					location: 'OpenrouterLlm.node.ts:createOpenRouterChatSender:success',
-					message: 'chat completions ok',
-					data: { choicesLength: Array.isArray(response.choices) ? response.choices.length : 0 },
-					timestamp: Date.now(),
-				}),
-			}).catch(() => {});
-			// #endregion
 		} catch (unknownError: unknown) {
-			const apiErr = unknownError instanceof NodeApiError ? unknownError : null;
-
-			// #region agent log
-			fetch('http://127.0.0.1:7559/ingest/98d5d16e-797c-4efe-89ed-798c24cf5fec', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'X-Debug-Session-Id': 'b0c2f0',
-				},
-				body: JSON.stringify({
-					sessionId: 'b0c2f0',
-					runId: 'post-fix',
-					hypothesisId: 'D',
-					location: 'OpenrouterLlm.node.ts:createOpenRouterChatSender:error',
-					message: 'chat completions failed',
-					data: {
-						errorName:
-							unknownError instanceof Error ? unknownError.constructor.name : typeof unknownError,
-						httpCodeInstance: apiErr?.httpCode ?? null,
-						httpCodeDuck:
-							unknownError !== null &&
-							typeof unknownError === 'object' &&
-							'httpCode' in unknownError
-								? String((unknownError as { httpCode?: unknown }).httpCode ?? '')
-								: null,
-						errMessage:
-							unknownError instanceof Error ? unknownError.message.substring(0, 200) : String(unknownError),
-					},
-					timestamp: Date.now(),
-				}),
-			}).catch(() => {});
-			// #endregion
-
 			throw toOpenRouterRequestError(executeFunctions, unknownError, itemIndex);
 		}
 

@@ -66,30 +66,6 @@ exports.OpenrouterLlm = OpenrouterLlm;
 async function executeItem(executeFunctions, itemIndex) {
     const credentials = await executeFunctions.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
     const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
-    const apiKeyRaw = credentials.apiKey;
-    fetch('http://127.0.0.1:7559/ingest/98d5d16e-797c-4efe-89ed-798c24cf5fec', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Debug-Session-Id': 'b0c2f0',
-        },
-        body: JSON.stringify({
-            sessionId: 'b0c2f0',
-            runId: 'post-fix',
-            hypothesisId: 'B-C-E',
-            location: 'OpenrouterLlm.node.ts:executeItem:credentials',
-            message: 'executeItem credentials snapshot',
-            data: {
-                baseUrlLength: baseUrl.length,
-                baseUrlEndsWithChat: baseUrl.endsWith('/chat/completions'),
-                apiKeyDefined: typeof apiKeyRaw === 'string',
-                apiKeyLength: typeof apiKeyRaw === 'string' ? apiKeyRaw.trim().length : 0,
-                siteUrlLength: typeof credentials.siteUrl === 'string' ? credentials.siteUrl.trim().length : 0,
-                appNameLength: typeof credentials.appName === 'string' ? credentials.appName.trim().length : 0,
-            },
-            timestamp: Date.now(),
-        }),
-    }).catch(() => { });
     const modelVariant = (0, OpenRouterRouting_1.getSelectedModelVariant)(executeFunctions, itemIndex);
     const outputMode = executeFunctions.getNodeParameter('outputMode', itemIndex, 'text');
     const maxRepairAttempts = outputMode === 'text'
@@ -116,7 +92,7 @@ async function executeItem(executeFunctions, itemIndex) {
 }
 function createOpenRouterChatSender(executeFunctions, baseUrl, headers, credentials, itemIndex) {
     return async (body) => {
-        var _a, _b, _c, _d, _e, _f, _g;
+        var _a, _b, _c, _d;
         const normalizedKey = (0, OpenRouterHeaders_1.normalizeOpenRouterApiKey)(credentials.apiKey);
         if (normalizedKey === '') {
             throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), 'OpenRouter API key is missing or empty.', {
@@ -124,31 +100,6 @@ function createOpenRouterChatSender(executeFunctions, baseUrl, headers, credenti
             });
         }
         const mergedHeaders = (0, OpenRouterHeaders_1.mergeOpenRouterAuthenticatedHeaders)(credentials, headers);
-        fetch('http://127.0.0.1:7559/ingest/98d5d16e-797c-4efe-89ed-798c24cf5fec', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Debug-Session-Id': 'b0c2f0',
-            },
-            body: JSON.stringify({
-                sessionId: 'b0c2f0',
-                runId: 'post-fix',
-                hypothesisId: 'G',
-                location: 'OpenrouterLlm.node.ts:createOpenRouterChatSender:before',
-                message: 'POST /chat/completions request context',
-                data: {
-                    baseUrlSegmentCount: baseUrl.split('/').length,
-                    extraHeaderKeys: Object.keys(headers),
-                    hasBearerAuthorization: mergedHeaders.Authorization === `Bearer ${normalizedKey}`,
-                    refererIsEmptyString: mergedHeaders['HTTP-Referer'] === '',
-                    titleHeaderIsEmptyString: mergedHeaders['X-OpenRouter-Title'] === '',
-                    rawKeyHadBearerWord: /^bearer\s+/i.test(String((_a = credentials.apiKey) !== null && _a !== void 0 ? _a : '').trim()),
-                    hasBodyModel: typeof body.model === 'string',
-                    hasBodyModelsArray: Array.isArray(body.models),
-                },
-                timestamp: Date.now(),
-            }),
-        }).catch(() => { });
         let response;
         try {
             response = (await executeFunctions.helpers.httpRequest.call(executeFunctions, {
@@ -159,55 +110,13 @@ function createOpenRouterChatSender(executeFunctions, baseUrl, headers, credenti
                 json: true,
                 body,
             }));
-            fetch('http://127.0.0.1:7559/ingest/98d5d16e-797c-4efe-89ed-798c24cf5fec', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Debug-Session-Id': 'b0c2f0',
-                },
-                body: JSON.stringify({
-                    sessionId: 'b0c2f0',
-                    runId: 'post-fix',
-                    hypothesisId: 'D',
-                    location: 'OpenrouterLlm.node.ts:createOpenRouterChatSender:success',
-                    message: 'chat completions ok',
-                    data: { choicesLength: Array.isArray(response.choices) ? response.choices.length : 0 },
-                    timestamp: Date.now(),
-                }),
-            }).catch(() => { });
         }
         catch (unknownError) {
-            const apiErr = unknownError instanceof n8n_workflow_1.NodeApiError ? unknownError : null;
-            fetch('http://127.0.0.1:7559/ingest/98d5d16e-797c-4efe-89ed-798c24cf5fec', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Debug-Session-Id': 'b0c2f0',
-                },
-                body: JSON.stringify({
-                    sessionId: 'b0c2f0',
-                    runId: 'post-fix',
-                    hypothesisId: 'D',
-                    location: 'OpenrouterLlm.node.ts:createOpenRouterChatSender:error',
-                    message: 'chat completions failed',
-                    data: {
-                        errorName: unknownError instanceof Error ? unknownError.constructor.name : typeof unknownError,
-                        httpCodeInstance: (_b = apiErr === null || apiErr === void 0 ? void 0 : apiErr.httpCode) !== null && _b !== void 0 ? _b : null,
-                        httpCodeDuck: unknownError !== null &&
-                            typeof unknownError === 'object' &&
-                            'httpCode' in unknownError
-                            ? String((_c = unknownError.httpCode) !== null && _c !== void 0 ? _c : '')
-                            : null,
-                        errMessage: unknownError instanceof Error ? unknownError.message.substring(0, 200) : String(unknownError),
-                    },
-                    timestamp: Date.now(),
-                }),
-            }).catch(() => { });
             throw toOpenRouterRequestError(executeFunctions, unknownError, itemIndex);
         }
         return {
             response,
-            text: (_g = (_f = (_e = (_d = response.choices) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.message) === null || _f === void 0 ? void 0 : _f.content) !== null && _g !== void 0 ? _g : '',
+            text: (_d = (_c = (_b = (_a = response.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) !== null && _d !== void 0 ? _d : '',
         };
     };
 }

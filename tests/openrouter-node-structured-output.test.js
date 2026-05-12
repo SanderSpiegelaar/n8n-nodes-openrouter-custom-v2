@@ -329,6 +329,58 @@ test('Openrouter LLM accepts OpenAI-style json_schema wrappers without validatin
 	assert.match(result[0][0].json.error, /must be object/i);
 });
 
+test('Openrouter LLM returns visible project report output for OpenAI-style json_schema wrappers', async () => {
+	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
+	const node = new OpenrouterLlm();
+	const schema = {
+		type: 'object',
+		properties: {
+			project: {
+				type: 'object',
+				properties: {
+					id: { type: 'string' },
+					name: { type: 'string' },
+					status: { type: 'string', enum: ['planning', 'active', 'on_hold', 'completed', 'cancelled'] },
+				},
+				required: ['id', 'name', 'status'],
+				additionalProperties: false,
+			},
+			risk_score: { type: 'number', minimum: 0, maximum: 1 },
+		},
+		required: ['project', 'risk_score'],
+		additionalProperties: false,
+	};
+	const projectReport = {
+		project: {
+			id: '2b142e13-64eb-4c92-b893-cb968a23d3fd',
+			name: 'Realtime Arena Backend',
+			status: 'active',
+		},
+		risk_score: 0.72,
+	};
+	const { context } = createExecutionContext(
+		{
+			model: 'openai/gpt-oss-120b',
+			prompt: 'Generate a fictional software project report',
+			outputMode: 'json_schema',
+			jsonSchema: JSON.stringify({ name: 'project_report', strict: true, schema }),
+			outputOptions: { includeResponseDetails: false },
+			maxValidationAttempts: 3,
+		},
+		{
+			responder: () => ({
+				id: 'gen-1',
+				choices: [{ message: { role: 'assistant', content: JSON.stringify(projectReport) } }],
+			}),
+		},
+	);
+
+	const result = await node.execute.call(context);
+
+	assert.deepEqual(result[0][0].json, { output: projectReport });
+	assert.equal(result[0][0].pairedItem.item, 0);
+});
+
 
 test('Openrouter LLM in json_schema mode allows array roots when schema allows arrays', async () => {
 	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
