@@ -6,11 +6,7 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
-import {
-	compileStructuredOutputSchema,
-	type StructuredOutputMode,
-	type StructuredValidationIssue,
-} from './StructuredOutputParser';
+import { type StructuredOutputMode } from './StructuredOutputParser';
 import {
 	loadOpenRouterModelCatalogOptions,
 	searchOpenRouterModelCatalog,
@@ -19,11 +15,14 @@ import { executeOpenRouter } from './OpenRouterExecution';
 import {
 	buildOpenRouterExecutionInput,
 	buildWebPlugin,
-	type CompiledStructuredSchema,
-	type JsonSchemaResponseFormat,
 } from './OpenRouterExecutionInputBuilder';
 import { buildProvider, getSelectedModelVariant, validateRouting } from './OpenRouterRouting';
 import { nodeParameterSurface } from './OpenRouterNodeProperties';
+import {
+	buildStructuredOutputError,
+	compileSchema,
+	getStructuredOutputDiagnosticFields,
+} from './StructuredOutputNodeAdapter';
 
 type ChatCompletionResponse = IDataObject & {
 	choices?: Array<{
@@ -210,116 +209,3 @@ function buildHeaders(executeFunctions: IExecuteFunctions, itemIndex: number): I
 }
 
 type OutputMode = StructuredOutputMode;
-
-type StructuredOutputFailureDiagnostics = {
-	errors: string[];
-	details: StructuredValidationIssue[];
-	originalRawText: string;
-	latestRepairText: string;
-};
-
-function buildStructuredOutputError(
-	executeFunctions: IExecuteFunctions,
-	itemIndex: number,
-	attempt: number,
-	diagnostics: StructuredOutputFailureDiagnostics,
-): NodeOperationError {
-	const error = new NodeOperationError(
-		executeFunctions.getNode(),
-		`Structured output validation failed after ${attempt} attempts: ${diagnostics.errors.join('; ')}. Raw model text: ${truncateForError(diagnostics.latestRepairText || diagnostics.originalRawText)}`,
-		{
-			itemIndex,
-			description: JSON.stringify({
-				validationErrors: diagnostics.errors,
-				validationDetails: diagnostics.details,
-				originalOutputText: truncateForError(diagnostics.originalRawText),
-				latestRepairText:
-					diagnostics.latestRepairText === ''
-						? undefined
-						: truncateForError(diagnostics.latestRepairText),
-			}),
-		},
-	);
-
-	return Object.assign(error, { structuredOutputDiagnostics: diagnostics });
-}
-
-function getStructuredOutputDiagnosticFields(error: unknown): IDataObject {
-	const diagnostics = (
-		error as { structuredOutputDiagnostics?: StructuredOutputFailureDiagnostics }
-	)?.structuredOutputDiagnostics;
-
-	if (diagnostics === undefined) {
-		return {};
-	}
-
-	return {
-		structuredOutputValidationErrors: diagnostics.errors,
-		structuredOutputValidationDetails: diagnostics.details as unknown as IDataObject[],
-		structuredOutputOriginalText: diagnostics.originalRawText,
-		structuredOutputLatestRepairText: diagnostics.latestRepairText,
-	};
-}
-
-function compileSchema(
-	executeFunctions: IExecuteFunctions,
-	itemIndex: number,
-): CompiledStructuredSchema {
-	const raw = executeFunctions.getNodeParameter('jsonSchema', itemIndex) as unknown;
-	let parsed: unknown = raw;
-
-	if (typeof raw === 'string') {
-		try {
-			parsed = JSON.parse(raw);
-		} catch (error) {
-			throw new NodeOperationError(
-				executeFunctions.getNode(),
-				`JSON Schema parse failed: ${error instanceof Error ? error.message : String(error)}`,
-			);
-		}
-	}
-
-	const responseFormat = normalizeJsonSchemaResponseFormat(parsed);
-
-	try {
-		return {
-			validator: compileStructuredOutputSchema(responseFormat.schema),
-			responseFormat,
-		};
-	} catch (error) {
-		throw new NodeOperationError(
-			executeFunctions.getNode(),
-			`JSON Schema compile failed: ${error instanceof Error ? error.message : String(error)}`,
-		);
-	}
-}
-
-function normalizeJsonSchemaResponseFormat(parsed: unknown): JsonSchemaResponseFormat {
-	if (isOpenAiJsonSchemaWrapper(parsed)) {
-		return {
-			name: typeof parsed.name === 'string' && parsed.name.trim() !== '' ? parsed.name : 'response',
-			schema: parsed.schema,
-			strict: typeof parsed.strict === 'boolean' ? parsed.strict : true,
-		};
-	}
-
-	return { name: 'response', schema: parsed, strict: true };
-}
-
-function isOpenAiJsonSchemaWrapper(
-	value: unknown,
-): value is { name?: unknown; schema: unknown; strict?: unknown } {
-	return (
-		value !== null &&
-		typeof value === 'object' &&
-		!Array.isArray(value) &&
-		Object.prototype.hasOwnProperty.call(value, 'schema') &&
-		(Object.prototype.hasOwnProperty.call(value, 'name') ||
-			Object.prototype.hasOwnProperty.call(value, 'strict'))
-	);
-}
-
-function truncateForError(text: string): string {
-	const limit = 2000;
-	return text.length <= limit ? text : `${text.slice(0, limit)}...[truncated]`;
-}
