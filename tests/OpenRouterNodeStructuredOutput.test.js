@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
-const { createExecutionContext } = require('./helpers/openrouter-test-context.js');
+const { createExecutionContext } = require('./helpers/OpenRouterTestContext.js');
 
 test('Openrouter LLM in json_object mode sends response_format and returns parsed structured payload', async () => {
 	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');

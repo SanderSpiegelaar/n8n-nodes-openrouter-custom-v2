@@ -162,11 +162,11 @@ High. This is the next behavior-oriented cleanup after Structured Output adaptat
 
 **Files involved**
 
-- `tests/openrouter-llm.test.js`
-- `tests/openrouter-execution-boundary.test.js`
-- `tests/openrouter-execution-input-builder.test.js`
-- `tests/openrouter-routing.test.js`
-- Potential new file: `tests/helpers/openrouter-test-context.js`
+- `tests/OpenRouterNodeStructuredOutput.test.js`
+- `tests/OpenRouterExecutionBoundary.test.js`
+- `tests/OpenRouterExecutionInputBuilder.test.js`
+- `tests/OpenRouterRouting.test.js`
+- `tests/helpers/OpenRouterTestContext.js`
 
 **Problem**
 

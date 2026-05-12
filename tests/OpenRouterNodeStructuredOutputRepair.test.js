@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
-const { createExecutionContext } = require('./helpers/openrouter-test-context.js');
+const { createExecutionContext } = require('./helpers/OpenRouterTestContext.js');
 
 test('structured output repair loop uses a callback seam and returns repaired success metadata', async () => {
 	const {

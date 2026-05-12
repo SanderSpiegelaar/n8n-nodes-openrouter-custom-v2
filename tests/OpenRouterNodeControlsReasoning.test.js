@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
-const { createExecutionContext } = require('./helpers/openrouter-test-context.js');
+const { createExecutionContext } = require('./helpers/OpenRouterTestContext.js');
 
 test('Openrouter LLM maps typed generation and advanced sampling controls', async () => {
 	const { OpenrouterLlm } = require('../dist/nodes/OpenrouterLlm/OpenrouterLlm.node.js');
