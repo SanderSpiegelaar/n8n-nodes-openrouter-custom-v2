@@ -63,6 +63,10 @@ test('OpenRouter custom credential uses a non-conflicting type and exposes secur
 	assert.equal(propertiesByName.baseUrl.default, 'https://openrouter.ai/api/v1');
 	assert.ok(propertiesByName.siteUrl);
 	assert.ok(propertiesByName.appName);
+	assert.equal(
+		credential.authenticate.properties.headers.Authorization,
+		'={{"Bearer " + $credentials.apiKey}}',
+	);
 });
 
 test('Openrouter LLM requires the package-specific OpenRouter credential type', () => {

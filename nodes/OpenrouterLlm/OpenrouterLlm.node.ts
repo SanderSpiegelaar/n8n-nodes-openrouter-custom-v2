@@ -11,7 +11,12 @@ import {
 	loadOpenRouterModelCatalogOptions,
 	searchOpenRouterModelCatalog,
 } from './OpenRouterModelCatalog';
-import { executeOpenRouter } from './OpenRouterExecution';
+import {
+	executeOpenRouter,
+	type ChatCompletionResponse,
+	type OpenRouterChatSender,
+	type OpenRouterExecutionData,
+} from './OpenRouterExecution';
 import {
 	buildOpenRouterExecutionInput,
 	buildWebPlugin,
@@ -23,14 +28,6 @@ import {
 	compileSchema,
 	getStructuredOutputDiagnosticFields,
 } from './StructuredOutputNodeAdapter';
-
-type ChatCompletionResponse = IDataObject & {
-	choices?: Array<{
-		message?: {
-			content?: string;
-		};
-	}>;
-};
 
 const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'] as const;
 const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
@@ -76,93 +73,15 @@ export class OpenrouterLlm implements INodeType {
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
 			try {
-				const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
-				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
-				const modelVariant = getSelectedModelVariant(this, itemIndex);
-				const outputMode = this.getNodeParameter('outputMode', itemIndex, 'text') as OutputMode;
-				const maxRepairAttempts =
-					outputMode === 'text'
-						? 0
-						: (this.getNodeParameter('maxValidationAttempts', itemIndex, 2) as number);
-				const compiledSchema =
-					outputMode === 'json_schema' ? compileSchema(this, itemIndex) : undefined;
-				const provider = buildProvider(this, itemIndex, outputMode);
-				const webPluginEnabled = buildWebPlugin(this, itemIndex) !== undefined;
-				validateRouting(this, modelVariant, provider, webPluginEnabled);
-				const headers = buildHeaders(this, itemIndex);
-
-				{
-					const executionResult = await executeOpenRouter({
-						input: buildOpenRouterExecutionInput(
-							this,
-							itemIndex,
-							provider,
-							outputMode,
-							compiledSchema,
-							maxRepairAttempts,
-						),
-						sendChat: async (body) => {
-							const response = (await this.helpers.httpRequestWithAuthentication.call(
-								this,
-								OPENROUTER_CUSTOM_CREDENTIAL_NAME,
-								{
-									method: 'POST',
-									baseURL: baseUrl,
-									url: '/chat/completions',
-									headers,
-									json: true,
-									body,
-								},
-							)) as ChatCompletionResponse;
-
-							return {
-								response,
-								text: response.choices?.[0]?.message?.content ?? '',
-							};
-						},
-					});
-
-					if (executionResult.kind !== 'success') {
-						throw buildStructuredOutputError(this, itemIndex, 1 + executionResult.error.repairAttempts, {
-							errors: executionResult.error.validationErrors,
-							details: executionResult.error.validationDetails,
-							originalRawText: executionResult.error.originalRawText,
-							latestRepairText: executionResult.error.latestRepairText,
-						});
-					}
-
-					returnData.push({
-						json: executionResult.data as IDataObject,
-						pairedItem: { item: itemIndex },
-					});
-					continue;
-				}
-
+				const data = await executeItem(this, itemIndex);
+				returnData.push(toN8nOutputItem(data, itemIndex));
 			} catch (error) {
 				if (this.continueOnFail()) {
-					const diagnosticFields = getStructuredOutputDiagnosticFields(error);
-					returnData.push({
-						json: {
-							error: error instanceof Error ? error.message : String(error),
-							...diagnosticFields,
-						},
-						pairedItem: { item: itemIndex },
-					});
+					returnData.push(toContinueOnFailOutputItem(error, itemIndex));
 					continue;
 				}
 
-				if (error instanceof NodeOperationError) {
-					throw new NodeOperationError(this.getNode(), error.message, {
-						itemIndex,
-						description: error.description ?? undefined,
-					});
-				}
-
-				throw new NodeApiError(
-					this.getNode(),
-					{ message: error instanceof Error ? error.message : String(error) },
-					{ itemIndex },
-				);
+				rethrowAsN8nError(this, error, itemIndex);
 			}
 		}
 
@@ -171,6 +90,118 @@ export class OpenrouterLlm implements INodeType {
 }
 
 
+
+async function executeItem(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+): Promise<OpenRouterExecutionData> {
+	const credentials = await executeFunctions.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
+	const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
+	const modelVariant = getSelectedModelVariant(executeFunctions, itemIndex);
+	const outputMode = executeFunctions.getNodeParameter('outputMode', itemIndex, 'text') as OutputMode;
+	const maxRepairAttempts =
+		outputMode === 'text'
+			? 0
+			: (executeFunctions.getNodeParameter('maxValidationAttempts', itemIndex, 2) as number);
+	const compiledSchema =
+		outputMode === 'json_schema' ? compileSchema(executeFunctions, itemIndex) : undefined;
+	const provider = buildProvider(executeFunctions, itemIndex, outputMode);
+	const webPluginEnabled = buildWebPlugin(executeFunctions, itemIndex) !== undefined;
+	validateRouting(executeFunctions, modelVariant, provider, webPluginEnabled);
+	const headers = buildHeaders(executeFunctions, itemIndex);
+
+	const executionResult = await executeOpenRouter({
+		input: buildOpenRouterExecutionInput(
+			executeFunctions,
+			itemIndex,
+			provider,
+			outputMode,
+			compiledSchema,
+			maxRepairAttempts,
+		),
+		sendChat: createOpenRouterChatSender(executeFunctions, baseUrl, headers),
+	});
+
+	if (executionResult.kind !== 'success') {
+		throw buildStructuredOutputError(
+			executeFunctions,
+			itemIndex,
+			1 + executionResult.error.repairAttempts,
+			{
+				errors: executionResult.error.validationErrors,
+				details: executionResult.error.validationDetails,
+				originalRawText: executionResult.error.originalRawText,
+				latestRepairText: executionResult.error.latestRepairText,
+			},
+		);
+	}
+
+	return executionResult.data;
+}
+
+function createOpenRouterChatSender(
+	executeFunctions: IExecuteFunctions,
+	baseUrl: string,
+	headers: IDataObject,
+): OpenRouterChatSender {
+	return async (body) => {
+		const response = (await executeFunctions.helpers.httpRequestWithAuthentication.call(
+			executeFunctions,
+			OPENROUTER_CUSTOM_CREDENTIAL_NAME,
+			{
+				method: 'POST',
+				baseURL: baseUrl,
+				url: '/chat/completions',
+				headers,
+				json: true,
+				body,
+			},
+		)) as ChatCompletionResponse;
+
+		return {
+			response,
+			text: response.choices?.[0]?.message?.content ?? '',
+		};
+	};
+}
+
+function toN8nOutputItem(data: OpenRouterExecutionData, itemIndex: number): INodeExecutionData {
+	return {
+		json: data as IDataObject,
+		pairedItem: { item: itemIndex },
+	};
+}
+
+function toContinueOnFailOutputItem(error: unknown, itemIndex: number): INodeExecutionData {
+	const diagnosticFields = getStructuredOutputDiagnosticFields(error);
+
+	return {
+		json: {
+			error: error instanceof Error ? error.message : String(error),
+			...diagnosticFields,
+		},
+		pairedItem: { item: itemIndex },
+	};
+}
+
+function rethrowAsN8nError(
+	executeFunctions: IExecuteFunctions,
+	error: unknown,
+	itemIndex: number,
+): never {
+	if (error instanceof NodeOperationError) {
+		throw new NodeOperationError(executeFunctions.getNode(), error.message, {
+			itemIndex,
+			description: error.description ?? undefined,
+		});
+	}
+
+	throw new NodeApiError(
+		executeFunctions.getNode(),
+		{ message: error instanceof Error ? error.message : String(error) },
+		{ itemIndex },
+	);
+}
 
 function buildHeaders(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
 	const headers: IDataObject = {};

@@ -48,7 +48,7 @@ class OpenRouterApi {
             type: 'generic',
             properties: {
                 headers: {
-                    Authorization: '=Bearer {{$credentials.apiKey}}',
+                    Authorization: '={{"Bearer " + $credentials.apiKey}}',
                     'HTTP-Referer': '={{$credentials.siteUrl}}',
                     'X-OpenRouter-Title': '={{$credentials.appName}}',
                 },

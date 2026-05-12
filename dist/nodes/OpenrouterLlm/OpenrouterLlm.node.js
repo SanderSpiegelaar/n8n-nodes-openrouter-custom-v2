@@ -44,82 +44,95 @@ class OpenrouterLlm {
         };
     }
     async execute() {
-        var _a;
         const items = this.getInputData();
         const returnData = [];
         for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
             try {
-                const credentials = await this.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
-                const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
-                const modelVariant = (0, OpenRouterRouting_1.getSelectedModelVariant)(this, itemIndex);
-                const outputMode = this.getNodeParameter('outputMode', itemIndex, 'text');
-                const maxRepairAttempts = outputMode === 'text'
-                    ? 0
-                    : this.getNodeParameter('maxValidationAttempts', itemIndex, 2);
-                const compiledSchema = outputMode === 'json_schema' ? (0, StructuredOutputNodeAdapter_1.compileSchema)(this, itemIndex) : undefined;
-                const provider = (0, OpenRouterRouting_1.buildProvider)(this, itemIndex, outputMode);
-                const webPluginEnabled = (0, OpenRouterExecutionInputBuilder_1.buildWebPlugin)(this, itemIndex) !== undefined;
-                (0, OpenRouterRouting_1.validateRouting)(this, modelVariant, provider, webPluginEnabled);
-                const headers = buildHeaders(this, itemIndex);
-                {
-                    const executionResult = await (0, OpenRouterExecution_1.executeOpenRouter)({
-                        input: (0, OpenRouterExecutionInputBuilder_1.buildOpenRouterExecutionInput)(this, itemIndex, provider, outputMode, compiledSchema, maxRepairAttempts),
-                        sendChat: async (body) => {
-                            var _a, _b, _c, _d;
-                            const response = (await this.helpers.httpRequestWithAuthentication.call(this, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
-                                method: 'POST',
-                                baseURL: baseUrl,
-                                url: '/chat/completions',
-                                headers,
-                                json: true,
-                                body,
-                            }));
-                            return {
-                                response,
-                                text: (_d = (_c = (_b = (_a = response.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) !== null && _d !== void 0 ? _d : '',
-                            };
-                        },
-                    });
-                    if (executionResult.kind !== 'success') {
-                        throw (0, StructuredOutputNodeAdapter_1.buildStructuredOutputError)(this, itemIndex, 1 + executionResult.error.repairAttempts, {
-                            errors: executionResult.error.validationErrors,
-                            details: executionResult.error.validationDetails,
-                            originalRawText: executionResult.error.originalRawText,
-                            latestRepairText: executionResult.error.latestRepairText,
-                        });
-                    }
-                    returnData.push({
-                        json: executionResult.data,
-                        pairedItem: { item: itemIndex },
-                    });
-                    continue;
-                }
+                const data = await executeItem(this, itemIndex);
+                returnData.push(toN8nOutputItem(data, itemIndex));
             }
             catch (error) {
                 if (this.continueOnFail()) {
-                    const diagnosticFields = (0, StructuredOutputNodeAdapter_1.getStructuredOutputDiagnosticFields)(error);
-                    returnData.push({
-                        json: {
-                            error: error instanceof Error ? error.message : String(error),
-                            ...diagnosticFields,
-                        },
-                        pairedItem: { item: itemIndex },
-                    });
+                    returnData.push(toContinueOnFailOutputItem(error, itemIndex));
                     continue;
                 }
-                if (error instanceof n8n_workflow_1.NodeOperationError) {
-                    throw new n8n_workflow_1.NodeOperationError(this.getNode(), error.message, {
-                        itemIndex,
-                        description: (_a = error.description) !== null && _a !== void 0 ? _a : undefined,
-                    });
-                }
-                throw new n8n_workflow_1.NodeApiError(this.getNode(), { message: error instanceof Error ? error.message : String(error) }, { itemIndex });
+                rethrowAsN8nError(this, error, itemIndex);
             }
         }
         return [returnData];
     }
 }
 exports.OpenrouterLlm = OpenrouterLlm;
+async function executeItem(executeFunctions, itemIndex) {
+    const credentials = await executeFunctions.getCredentials(OPENROUTER_CUSTOM_CREDENTIAL_NAME);
+    const baseUrl = credentials.baseUrl.replace(/\/+$/, '');
+    const modelVariant = (0, OpenRouterRouting_1.getSelectedModelVariant)(executeFunctions, itemIndex);
+    const outputMode = executeFunctions.getNodeParameter('outputMode', itemIndex, 'text');
+    const maxRepairAttempts = outputMode === 'text'
+        ? 0
+        : executeFunctions.getNodeParameter('maxValidationAttempts', itemIndex, 2);
+    const compiledSchema = outputMode === 'json_schema' ? (0, StructuredOutputNodeAdapter_1.compileSchema)(executeFunctions, itemIndex) : undefined;
+    const provider = (0, OpenRouterRouting_1.buildProvider)(executeFunctions, itemIndex, outputMode);
+    const webPluginEnabled = (0, OpenRouterExecutionInputBuilder_1.buildWebPlugin)(executeFunctions, itemIndex) !== undefined;
+    (0, OpenRouterRouting_1.validateRouting)(executeFunctions, modelVariant, provider, webPluginEnabled);
+    const headers = buildHeaders(executeFunctions, itemIndex);
+    const executionResult = await (0, OpenRouterExecution_1.executeOpenRouter)({
+        input: (0, OpenRouterExecutionInputBuilder_1.buildOpenRouterExecutionInput)(executeFunctions, itemIndex, provider, outputMode, compiledSchema, maxRepairAttempts),
+        sendChat: createOpenRouterChatSender(executeFunctions, baseUrl, headers),
+    });
+    if (executionResult.kind !== 'success') {
+        throw (0, StructuredOutputNodeAdapter_1.buildStructuredOutputError)(executeFunctions, itemIndex, 1 + executionResult.error.repairAttempts, {
+            errors: executionResult.error.validationErrors,
+            details: executionResult.error.validationDetails,
+            originalRawText: executionResult.error.originalRawText,
+            latestRepairText: executionResult.error.latestRepairText,
+        });
+    }
+    return executionResult.data;
+}
+function createOpenRouterChatSender(executeFunctions, baseUrl, headers) {
+    return async (body) => {
+        var _a, _b, _c, _d;
+        const response = (await executeFunctions.helpers.httpRequestWithAuthentication.call(executeFunctions, OPENROUTER_CUSTOM_CREDENTIAL_NAME, {
+            method: 'POST',
+            baseURL: baseUrl,
+            url: '/chat/completions',
+            headers,
+            json: true,
+            body,
+        }));
+        return {
+            response,
+            text: (_d = (_c = (_b = (_a = response.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) !== null && _d !== void 0 ? _d : '',
+        };
+    };
+}
+function toN8nOutputItem(data, itemIndex) {
+    return {
+        json: data,
+        pairedItem: { item: itemIndex },
+    };
+}
+function toContinueOnFailOutputItem(error, itemIndex) {
+    const diagnosticFields = (0, StructuredOutputNodeAdapter_1.getStructuredOutputDiagnosticFields)(error);
+    return {
+        json: {
+            error: error instanceof Error ? error.message : String(error),
+            ...diagnosticFields,
+        },
+        pairedItem: { item: itemIndex },
+    };
+}
+function rethrowAsN8nError(executeFunctions, error, itemIndex) {
+    var _a;
+    if (error instanceof n8n_workflow_1.NodeOperationError) {
+        throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), error.message, {
+            itemIndex,
+            description: (_a = error.description) !== null && _a !== void 0 ? _a : undefined,
+        });
+    }
+    throw new n8n_workflow_1.NodeApiError(executeFunctions.getNode(), { message: error instanceof Error ? error.message : String(error) }, { itemIndex });
+}
 function buildHeaders(executeFunctions, itemIndex) {
     var _a, _b, _c, _d, _e;
     const headers = {};
