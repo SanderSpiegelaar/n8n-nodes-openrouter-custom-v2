@@ -17,7 +17,7 @@ function createBuilderContext(parameters, overrides = {}) {
 }
 
 function loadBuilderModule() {
-	return require('../dist/nodes/OpenrouterLlm/OpenRouterExecutionInputBuilder.js');
+	return require('../dist/nodes/OpenrouterLlm/execution/OpenRouterExecutionInputBuilder.js');
 }
 
 test('OpenRouter Execution input builder maps system/user prompt and sampling controls', () => {

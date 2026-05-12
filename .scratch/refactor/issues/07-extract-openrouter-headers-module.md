@@ -1,6 +1,6 @@
 # Extract OpenRouter Headers Module
 
-Status: ready-for-agent
+Status: done
 
 ## Goal
 

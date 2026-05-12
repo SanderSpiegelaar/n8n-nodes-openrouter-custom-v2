@@ -1,6 +1,6 @@
 # Split OpenRouter LLM Test By Domain
 
-Status: ready-for-agent
+Status: done
 
 ## Goal
 

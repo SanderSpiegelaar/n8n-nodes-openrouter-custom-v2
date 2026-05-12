@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
 function loadPropertiesModule() {
-	return require('../dist/nodes/OpenrouterLlm/OpenRouterNodeProperties.js');
+	return require('../dist/nodes/OpenrouterLlm/properties/OpenRouterNodeProperties.js');
 }
 
 function findProperty(properties, name) {

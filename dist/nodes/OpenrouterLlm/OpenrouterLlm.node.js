@@ -2,13 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpenrouterLlm = void 0;
 const n8n_workflow_1 = require("n8n-workflow");
-const OpenRouterModelCatalog_1 = require("./OpenRouterModelCatalog");
-const OpenRouterExecution_1 = require("./OpenRouterExecution");
-const OpenRouterExecutionInputBuilder_1 = require("./OpenRouterExecutionInputBuilder");
-const OpenRouterRouting_1 = require("./OpenRouterRouting");
-const OpenRouterNodeProperties_1 = require("./OpenRouterNodeProperties");
-const StructuredOutputNodeAdapter_1 = require("./StructuredOutputNodeAdapter");
-const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'];
+const OpenRouterModelCatalog_1 = require("./catalog/OpenRouterModelCatalog");
+const OpenRouterExecution_1 = require("./execution/OpenRouterExecution");
+const OpenRouterExecutionInputBuilder_1 = require("./execution/OpenRouterExecutionInputBuilder");
+const OpenRouterRouting_1 = require("./routing/OpenRouterRouting");
+const OpenRouterNodeProperties_1 = require("./properties/OpenRouterNodeProperties");
+const StructuredOutputNodeAdapter_1 = require("./structured-output/StructuredOutputNodeAdapter");
+const OpenRouterHeaders_1 = require("./execution/OpenRouterHeaders");
 const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
 class OpenrouterLlm {
     constructor() {
@@ -75,7 +75,7 @@ async function executeItem(executeFunctions, itemIndex) {
     const provider = (0, OpenRouterRouting_1.buildProvider)(executeFunctions, itemIndex, outputMode);
     const webPluginEnabled = (0, OpenRouterExecutionInputBuilder_1.buildWebPlugin)(executeFunctions, itemIndex) !== undefined;
     (0, OpenRouterRouting_1.validateRouting)(executeFunctions, modelVariant, provider, webPluginEnabled);
-    const headers = buildHeaders(executeFunctions, itemIndex);
+    const headers = (0, OpenRouterHeaders_1.buildOpenRouterHeaders)(executeFunctions, itemIndex);
     const executionResult = await (0, OpenRouterExecution_1.executeOpenRouter)({
         input: (0, OpenRouterExecutionInputBuilder_1.buildOpenRouterExecutionInput)(executeFunctions, itemIndex, provider, outputMode, compiledSchema, maxRepairAttempts),
         sendChat: createOpenRouterChatSender(executeFunctions, baseUrl, headers),
@@ -132,26 +132,5 @@ function rethrowAsN8nError(executeFunctions, error, itemIndex) {
         });
     }
     throw new n8n_workflow_1.NodeApiError(executeFunctions.getNode(), { message: error instanceof Error ? error.message : String(error) }, { itemIndex });
-}
-function buildHeaders(executeFunctions, itemIndex) {
-    var _a, _b, _c, _d, _e;
-    const headers = {};
-    const integrations = executeFunctions.getNodeParameter('integrations', itemIndex, {});
-    const langfuseTrace = (_a = integrations.langfuseTrace) !== null && _a !== void 0 ? _a : true;
-    const customHeaders = (_b = integrations.headers) !== null && _b !== void 0 ? _b : {};
-    if (langfuseTrace) {
-        headers['langfuse-trace-id'] = executeFunctions.getExecutionId();
-    }
-    for (const header of (_c = customHeaders.values) !== null && _c !== void 0 ? _c : []) {
-        const name = (_d = header.name) !== null && _d !== void 0 ? _d : '';
-        if (name.trim() === '') {
-            continue;
-        }
-        if (PROTECTED_HEADERS.includes(name.toLowerCase())) {
-            throw new n8n_workflow_1.NodeOperationError(executeFunctions.getNode(), `${name} is a protected header.`);
-        }
-        headers[name] = (_e = header.value) !== null && _e !== void 0 ? _e : '';
-    }
-    return headers;
 }
 //# sourceMappingURL=OpenrouterLlm.node.js.map

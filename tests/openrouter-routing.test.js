@@ -13,7 +13,7 @@ function createRoutingContext(parameters) {
 }
 
 function loadRoutingModule() {
-	return require('../dist/nodes/OpenrouterLlm/OpenRouterRouting.js');
+	return require('../dist/nodes/OpenrouterLlm/routing/OpenRouterRouting.js');
 }
 
 test('OpenRouter routing resolves primary model variants after stripping existing variants', () => {

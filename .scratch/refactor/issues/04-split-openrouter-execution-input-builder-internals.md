@@ -1,6 +1,6 @@
 # Split OpenRouter Execution Input Builder Internals
 
-Status: ready-for-agent
+Status: done
 
 ## Goal
 

@@ -4,7 +4,7 @@ import {
 	DEFAULT_REPAIR_MODEL,
 	DEFAULT_REPAIR_REASONING_EFFORT,
 	DEFAULT_REPAIR_TEMPERATURE,
-} from '../StructuredOutputParser';
+} from '../structured-output/StructuredOutputParser';
 
 export const structuredOutputRepairProperties: INodeProperties[] = [
 	{

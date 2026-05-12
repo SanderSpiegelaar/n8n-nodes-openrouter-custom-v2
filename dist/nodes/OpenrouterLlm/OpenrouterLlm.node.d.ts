@@ -1,5 +1,5 @@
 import type { IExecuteFunctions, INodeExecutionData, INodeType, INodeTypeDescription } from 'n8n-workflow';
-import { loadOpenRouterModelCatalogOptions, searchOpenRouterModelCatalog } from './OpenRouterModelCatalog';
+import { loadOpenRouterModelCatalogOptions, searchOpenRouterModelCatalog } from './catalog/OpenRouterModelCatalog';
 export declare class OpenrouterLlm implements INodeType {
     description: INodeTypeDescription;
     methods: {

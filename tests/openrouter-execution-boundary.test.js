@@ -47,7 +47,7 @@ function loadNode() {
 }
 
 function loadExecutionModule() {
-	return require('../dist/nodes/OpenrouterLlm/OpenRouterExecution.js');
+	return require('../dist/nodes/OpenrouterLlm/execution/OpenRouterExecution.js');
 }
 
 test('OpenRouter Execution public seam returns text success data and compatible request body', async () => {

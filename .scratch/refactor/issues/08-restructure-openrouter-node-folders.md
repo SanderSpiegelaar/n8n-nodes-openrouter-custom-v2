@@ -1,6 +1,6 @@
 # Restructure OpenRouter Node Folders
 
-Status: ready-for-agent
+Status: done
 
 ## Goal
 

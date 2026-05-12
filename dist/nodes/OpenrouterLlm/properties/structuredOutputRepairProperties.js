@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.structuredOutputRepairProperties = void 0;
-const StructuredOutputParser_1 = require("../StructuredOutputParser");
+const StructuredOutputParser_1 = require("../structured-output/StructuredOutputParser");
 exports.structuredOutputRepairProperties = [
     {
         displayName: 'Max Repair Attempts',

@@ -6,30 +6,30 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
-import { type StructuredOutputMode } from './StructuredOutputParser';
+import { type StructuredOutputMode } from './structured-output/StructuredOutputParser';
 import {
 	loadOpenRouterModelCatalogOptions,
 	searchOpenRouterModelCatalog,
-} from './OpenRouterModelCatalog';
+} from './catalog/OpenRouterModelCatalog';
 import {
 	executeOpenRouter,
 	type ChatCompletionResponse,
 	type OpenRouterChatSender,
 	type OpenRouterExecutionData,
-} from './OpenRouterExecution';
+} from './execution/OpenRouterExecution';
 import {
 	buildOpenRouterExecutionInput,
 	buildWebPlugin,
-} from './OpenRouterExecutionInputBuilder';
-import { buildProvider, getSelectedModelVariant, validateRouting } from './OpenRouterRouting';
-import { nodeParameterSurface } from './OpenRouterNodeProperties';
+} from './execution/OpenRouterExecutionInputBuilder';
+import { buildProvider, getSelectedModelVariant, validateRouting } from './routing/OpenRouterRouting';
+import { nodeParameterSurface } from './properties/OpenRouterNodeProperties';
 import {
 	buildStructuredOutputError,
 	compileSchema,
 	getStructuredOutputDiagnosticFields,
-} from './StructuredOutputNodeAdapter';
+} from './structured-output/StructuredOutputNodeAdapter';
+import { buildOpenRouterHeaders } from './execution/OpenRouterHeaders';
 
-const PROTECTED_HEADERS = ['authorization', 'http-referer', 'x-title'] as const;
 const OPENROUTER_CUSTOM_CREDENTIAL_NAME = 'openRouterCustomV2Api';
 
 
@@ -108,7 +108,7 @@ async function executeItem(
 	const provider = buildProvider(executeFunctions, itemIndex, outputMode);
 	const webPluginEnabled = buildWebPlugin(executeFunctions, itemIndex) !== undefined;
 	validateRouting(executeFunctions, modelVariant, provider, webPluginEnabled);
-	const headers = buildHeaders(executeFunctions, itemIndex);
+	const headers = buildOpenRouterHeaders(executeFunctions, itemIndex);
 
 	const executionResult = await executeOpenRouter({
 		input: buildOpenRouterExecutionInput(
@@ -201,42 +201,6 @@ function rethrowAsN8nError(
 		{ message: error instanceof Error ? error.message : String(error) },
 		{ itemIndex },
 	);
-}
-
-function buildHeaders(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
-	const headers: IDataObject = {};
-	const integrations = executeFunctions.getNodeParameter(
-		'integrations',
-		itemIndex,
-		{},
-	) as IDataObject;
-	const langfuseTrace = (integrations.langfuseTrace as boolean | undefined) ?? true;
-	const customHeaders =
-		(integrations.headers as
-			| {
-					values?: Array<{ name?: string; value?: string }>;
-			  }
-			| undefined) ?? {};
-
-	if (langfuseTrace) {
-		headers['langfuse-trace-id'] = executeFunctions.getExecutionId();
-	}
-
-	for (const header of customHeaders.values ?? []) {
-		const name = header.name ?? '';
-
-		if (name.trim() === '') {
-			continue;
-		}
-
-		if (PROTECTED_HEADERS.includes(name.toLowerCase() as (typeof PROTECTED_HEADERS)[number])) {
-			throw new NodeOperationError(executeFunctions.getNode(), `${name} is a protected header.`);
-		}
-
-		headers[name] = header.value ?? '';
-	}
-
-	return headers;
 }
 
 type OutputMode = StructuredOutputMode;
